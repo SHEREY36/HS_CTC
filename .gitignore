@@ -1,0 +1,19 @@
+# Build artifacts
+build/
+build2/
+*.o
+*.mod
+
+# Binaries
+SphCyl
+
+# Test output data
+test/
+
+# Editor/IDE
+*.swp
+*~
+.vscode/
+
+# Claude
+CLAUDE.md

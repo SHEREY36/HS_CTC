@@ -1,0 +1,19 @@
+
+	module output
+	
+	implicit none
+	
+	INTEGER :: NHIT
+	LOGICAL :: HIT
+	
+	DOUBLE PRECISION :: CSX
+	DOUBLE PRECISION, DIMENSION(3) :: VREL0
+	DOUBLE PRECISION :: PROJ_AREA
+	
+	DOUBLE PRECISION :: E0, Er_00, Et_00, Er_1, Er_2
+	DOUBLE PRECISION :: TMEAN, RMEAN
+	DOUBLE PRECISION :: b_impact, b_contact
+	
+	LOGICAL :: SIM_CONTINUE
+
+	end module output	

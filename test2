@@ -1,0 +1,16 @@
+#!/bin/sh -l
+#SBATCH -A morri353
+#SBATCH --nodes=1
+#SBATCH --tasks-per-node=20
+#SBATCH --time=24:00:00
+#SBATCH --job-name test2
+
+cd $SLURM_SUBMIT_DIR
+
+cd ./test
+cd ./t_low/1_1
+../../../SphCyl >& out &
+cd ../1_0
+../../../SphCyl >& out &
+
+wait

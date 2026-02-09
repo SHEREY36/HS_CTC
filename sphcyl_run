@@ -1,0 +1,40 @@
+#!/bin/sh -l
+#SBATCH -A morri353
+#SBATCH --nodes=1
+#SBATCH --tasks-per-node=20
+#SBATCH --time=96:00:00
+#SBATCH --job-name spherocyl
+
+cd $SLURM_SUBMIT_DIR
+
+cd ./AR
+cd ./10
+../../SphCyl >& out &
+cd ../12
+../../SphCyl >& out &
+cd ../14
+../../SphCyl >& out &
+cd ../16
+../../SphCyl >& out &
+cd ../18
+../../SphCyl >& out &
+cd ../20
+../../SphCyl >& out &
+cd ../30
+../../SphCyl >& out &
+cd ../40
+../../SphCyl >& out &
+cd ../50
+../../SphCyl >& out &
+cd ../60
+../../SphCyl >& out &
+cd ../70
+../../SphCyl >& out &
+cd ../80
+../../SphCyl >& out &
+cd ../90
+../../SphCyl >& out &
+cd ../100
+../../SphCyl >& out &
+
+wait

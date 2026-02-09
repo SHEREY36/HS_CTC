@@ -1,0 +1,164 @@
+
+	subroutine calc_force_dem
+	USE PARTICLES
+	USE CONSTANTS
+	USE OUTPUT
+	implicit none
+	DOUBLE PRECISION, DIMENSION(3) :: RHO1, RHO2, E21
+	DOUBLE PRECISION, DIMENSION(3) :: C1R1, C2R2
+	DOUBLE PRECISION, DIMENSION(3) :: VR, OMEGAI, OMEGAJ, V_ROT
+	DOUBLE PRECISION :: VRN
+	DOUBLE PRECISION :: DISTSQ, DN
+	DOUBLE PRECISION :: FC, FK, FTOTAL(3) 
+	DOUBLE PRECISION, DIMENSION(3) :: FN, F_TMP, TAU_FORCE
+	! temporary storage of torque
+        DOUBLE PRECISION :: TAU_TMP(3,2)
+	INTEGER :: I, J
+	
+	F(:,:) = 0.D0; TAU(:,:) = 0.D0;
+
+	I=1; J=2;
+
+	CALL OVERLAP_PP(DISTSQ, RHO1, RHO2, E21)
+	F_TMP(:) = 0.0D0
+
+	! Translational relative velocity
+	VR = VEL(2,:) - VEL(1,:) 
+
+	! calculate the rotational relative velocity
+        OMEGAI = OMEGA(I,2)*UX(I,:) + OMEGA(I,3)*UY(I,:);
+        OMEGAJ = OMEGA(J,2)*UX(J,:) + OMEGA(J,3)*UY(J,:);
+        V_ROT = CROSSPRDCT(RHO2,OMEGAJ) - CROSSPRDCT(RHO1,OMEGAI)
+
+	! Normal component of relative velocity (scalar)
+	VRN = -(DOT_PRODUCT(VR, E21))
+
+	CONTACT = .FALSE.
+	IF(DISTSQ.GT.(DIA-SMALL_NUM)**2.D0) RETURN
+
+	CONTACT = .TRUE.
+	DN = DIA - SQRT(DISTSQ)
+
+	! Calculate the normal contact force
+	! Force vector points from i to j
+        FN(:) =  (KN*DN*E21) + (CN*VRN*E21)
+
+
+	!C1R1 = C1 - POS(1,:)
+	!C2R2 = C2 - POS(2,:)
+	! 
+	!-&
+	!	CROSSPRDCT(C2R2,UX(2,:)*OMEGA(2,2) + UY(2,:)*OMEGA(2,3)) +&
+	!	CROSSPRDCT(C1R1,UX(1,:)*OMEGA(1,2) + UY(1,:)*OMEGA(1,3))
+
+	
+
+	!FK = KN*(DN**1.5D0); 
+	!FC = CN*VN*(DN**0.25D0)
+	!FTOTAL = (FK+FC)*E21
+
+	F_TMP(:) = FN(:)
+
+	F(I,:) = F(I,:) - F_TMP(:)
+        F(J,:) = F(J,:) + F_TMP(:)
+
+	!TAU(1,:) = TAU(1,:) + CROSSPRDCT(C1R1,-FTOTAL)
+	!TAU(2,:) = TAU(2,:) + CROSSPRDCT(C2R2,FTOTAL)
+
+	! Torques felt by each particle
+	! Use temporary force, not FC; otherwise, overcounting torques
+	! In cases where mulitple contacts exist
+        TAU_force(:) = CROSSPRDCT(RHO1, -F_TMP(:))
+        TAU_TMP(1,1) = DOT_PRODUCT(TAU_FORCE,U(I,:))
+        TAU_TMP(2,1) = DOT_PRODUCT(TAU_FORCE,UX(I,:))
+        TAU_TMP(3,1) = DOT_PRODUCT(TAU_FORCE,UY(I,:))
+
+        TAU_force(:) = CROSSPRDCT(RHO2, F_TMP(:))
+        TAU_TMP(1,2) = DOT_PRODUCT(TAU_FORCE,U(J,:))
+        TAU_TMP(2,2) = DOT_PRODUCT(TAU_FORCE,UX(J,:))
+        TAU_TMP(3,2) = DOT_PRODUCT(TAU_FORCE,UY(J,:))
+            
+        TAU(1,:)  = TAU(1,:) + TAU_TMP(:,1)
+        TAU(2,:)  = TAU(2,:) + TAU_TMP(:,2)	
+
+	IF(.NOT.HIT) THEN
+		HIT = .TRUE.
+		CALL PROJECTED_AREA()
+	END IF
+	return
+	end subroutine calc_force_dem
+!-------------------------------------------------------------------		
+	SUBROUTINE OVERLAP_PP(DSQ,RHO1,RHO2,E21)
+	USE CONSTANTS, ONLY: SMALL_NUM
+	USE PARTICLES
+	IMPLICIT NONE
+	DOUBLE PRECISION :: R12(3), R12SQ
+	DOUBLE PRECISION :: C21(3)
+	DOUBLE PRECISION :: U1DOT, U2DOT, UDOT
+	DOUBLE PRECISION :: CC, oCC
+	DOUBLE PRECISION :: LAMBDA, MU
+	DOUBLE PRECISION :: V1, V2
+	DOUBLE PRECISION, INTENT(OUT) :: DSQ, RHO1(3), RHO2(3), E21(3)
+	DOUBLE PRECISION :: C1(3), C2(3)
+	
+	R12 = POS(2,:)-POS(1,:); R12SQ = DOT_PRODUCT(R12,R12)
+	U1DOT = DOT_PRODUCT(U(1,:),R12); U2DOT = DOT_PRODUCT(U(2,:),R12)
+	UDOT = DOT_PRODUCT(U(1,:),U(2,:)); CC = 1.D0 - UDOT**2.D0
+	IF(CC.LT.SMALL_NUM) THEN
+		DSQ = R12SQ - U1DOT**2.D0 + (MAX(0.D0,ABS(U1DOT)-hLCYL))**2.D0
+		IF(ABS(U1DOT).GT.SMALL_NUM) THEN
+			LAMBDA = SIGN(hLCYL,U1DOT)
+			MU = LAMBDA*UDOT-U1DOT
+			IF(ABS(MU)>hLCYL) MU = SIGN(hLCYL,MU)
+		ELSE
+			LAMBDA = 0.D0; MU = 0.D0
+		END IF
+	ELSE
+		oCC = 1.D0/CC
+		LAMBDA = (U1DOT-UDOT*U2DOT)*oCC
+		MU = (-U2DOT+UDOT*U1DOT)*oCC
+		V1 = ABS(LAMBDA)-hLCYL; V2 = ABS(MU)-hLCYL
+		IF(V1.GT.0.D0.OR.V2.GT.0.D0) THEN
+			IF(V1.GT.V2) THEN
+				LAMBDA = SIGN(hLCYL,LAMBDA)
+				MU = LAMBDA*UDOT-U2DOT
+				IF(ABS(MU).GT.hLCYL) MU = SIGN(hLCYL,MU)
+			ELSE
+				MU = SIGN(hLCYL,MU)
+				LAMBDA = MU*UDOT+U1DOT
+				IF(ABS(LAMBDA).GT.hLCYL) LAMBDA = SIGN(hLCYL,LAMBDA)
+			END IF
+		END IF
+		DSQ = R12SQ + LAMBDA**2.D0 + MU**2.D0 &
+			- 2.D0*LAMBDA*MU*UDOT + 2.D0*MU*U2DOT &
+			- 2.D0*LAMBDA*U1DOT
+	END IF
+	RHO1 = LAMBDA*U(1,:)
+	RHO2 = MU*U(2,:);
+	C1 = POS(1,:) + RHO1; 
+	C2 = POS(2,:) + RHO2
+	C21 = C2-C1; 
+	E21 = C21/SQRT(DSQ)
+	return
+	END SUBROUTINE OVERLAP_PP
+!-------------------------------------------------------------------	
+	SUBROUTINE PROJECTED_AREA()
+	USE PARTICLES
+	USE OUTPUT
+	IMPLICIT NONE
+	DOUBLE PRECISION, DIMENSION(3) :: V12, R12, RPOSF,RVN12,RN12
+	DOUBLE PRECISION, DIMENSION(3) :: U1, U2
+	
+	V12 = VEL(2,:) - VEL(1,:); V12 = V12/SQRT(DOT_PRODUCT(V12,V12))
+	R12 = POS(2,:) - POS(1,:); R12 = R12/SQRT(DOT_PRODUCT(R12,R12))
+	U1 = U(1,:) - DOT_PRODUCT(U(1,:),V12)*V12
+	U2 = U(2,:) - DOT_PRODUCT(U(2,:),V12)*V12
+	PROJ_AREA = &
+		ABS(DOT_PRODUCT(U1,R12)) + ABS(DOT_PRODUCT(U2,R12))
+	RVN12 = VEL(2,:) - VEL(1,:);
+	RN12 = POS(2,:) - POS(1,:)
+	RPOSF = RN12 - DOT_PRODUCT(RVN12,RN12)&
+		*RVN12/DOT_PRODUCT(RVN12,RVN12)
+	b_contact = SQRT(DOT_PRODUCT(RPOSF,RPOSF))/(LCYL+DIA)
+	return
+	END SUBROUTINE PROJECTED_AREA
