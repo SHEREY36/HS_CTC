@@ -1,5 +1,7 @@
 # Build artifacts
-build/
+build/*.o
+build/*.mod
+build/SphCyl
 build2/
 *.o
 *.mod

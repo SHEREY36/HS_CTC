@@ -11,15 +11,33 @@
 
 ! Output Files
 !---------------------------------------------------------
-	open(unit=1000, status='replace', file='csx.txt')
-	open(unit=1001, status='replace', file='chi.txt')
-	open(unit=1002, status='replace', file='Ef.txt')
-	open(unit=1003, status='replace', file='EnergyCons.txt')
-	open(unit=1004, status='replace', file='NPhit.txt')
-	open(unit=2000, status='replace', file='projArea.txt')
-	open(unit=100,  status='replace', file='init.txt')
-        open(unit=1111, status='replace', file='PreRotEnergy.txt')
-        !open(unit=2925, status='replace', file='ovito.txt')
+	CHARACTER(LEN=300) :: filepath
+
+	filepath = TRIM(output_dir) // '/csx.txt'
+	open(unit=1000, status='replace', file=filepath)
+
+	filepath = TRIM(output_dir) // '/chi.txt'
+	open(unit=1001, status='replace', file=filepath)
+
+	filepath = TRIM(output_dir) // '/Ef.txt'
+	open(unit=1002, status='replace', file=filepath)
+
+	filepath = TRIM(output_dir) // '/EnergyCons.txt'
+	open(unit=1003, status='replace', file=filepath)
+
+	filepath = TRIM(output_dir) // '/NPhit.txt'
+	open(unit=1004, status='replace', file=filepath)
+
+	filepath = TRIM(output_dir) // '/projArea.txt'
+	open(unit=2000, status='replace', file=filepath)
+
+	filepath = TRIM(output_dir) // '/init.txt'
+	open(unit=100,  status='replace', file=filepath)
+
+	filepath = TRIM(output_dir) // '/PreRotEnergy.txt'
+	open(unit=1111, status='replace', file=filepath)
+
+	!open(unit=2925, status='replace', file='ovito.txt')
 
 ! Particle Properties
 !---------------------------------------------------------

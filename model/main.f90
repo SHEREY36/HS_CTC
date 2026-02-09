@@ -5,6 +5,7 @@
 	use particles
 	use output
 	use constants
+!$ use omp_lib
 
 	implicit none
 	DOUBLE PRECISION, DIMENSION(3) :: R12, E12
@@ -12,12 +13,26 @@
         DOUBLE PRECISION :: yaw, pitch, roll, q0, q1, q2, q3
         INTEGER :: I
 	real :: xint
-	
+	INTEGER :: num_threads
+
 	write(*,*) 'Reading and initializing'
 	call read_input()
 	call INITIALIZE()
-	
+
+	! Initialize buffer indices
+!$OMP PARALLEL
+	buffer_idx = 0
+!$OMP END PARALLEL
+
+	! Report thread count
+	num_threads = 1
+!$ num_threads = omp_get_max_threads()
+	write(*,*) 'Using ', num_threads, ' thread(s)'
+
 	write(*,*) 'Beginning collisions'
+
+!$OMP PARALLEL PRIVATE(R12, E12, D12, RV12) &
+!$OMP SHARED(NTRY, NHIT, SIM_CONTINUE, NSAMPLES)
 	DO WHILE(SIM_CONTINUE)
 		CALL INIT_PART()
 		DO WHILE(.TRUE.)
@@ -56,10 +71,18 @@
 				SUM(TAU).LT.SMALL_NUM) EXIT
 		END DO
 		IF(HIT) CALL MEASURE_DEM
+
+!$OMP ATOMIC
 		NTRY = NTRY + 1
-		!IF(NTRY.GE.NSAMPLES) SIM_CONTINUE = .FALSE.
-		write(*,*) 'Number of samples: ', NTRY
+!$OMP END ATOMIC
+
+		! Progress update (only from master thread)
+!$OMP MASTER
+		IF(MOD(NTRY, 1000) == 0) write(*,*) 'Number of samples: ', NTRY
+!$OMP END MASTER
 	END DO
+!$OMP END PARALLEL
+
 	write(*,*) 'Number of hits: ', NHIT-1
 	
 		

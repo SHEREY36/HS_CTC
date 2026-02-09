@@ -31,20 +31,37 @@
 	Ef(2) = MOI(2)*(DOT_PRODUCT(OMEGA(1,2:3),OMEGA(1,2:3)) + &
 		DOT_PRODUCT(OMEGA(2,2:3),OMEGA(2,2:3)))
 	
-        Er10 = Er1
-        Er20 = Er2
+        Er10 = Er_1
+        Er20 = Er_2
 
 	Er1_prime = MOI(2)*DOT_PRODUCT(OMEGA(1,2:3),OMEGA(1,2:3))
 	Er2_prime = MOI(2)*DOT_PRODUCT(OMEGA(2,2:3),OMEGA(2,2:3))
 
-	write(1001,'(3(E14.8,2X))') b_impact, chi, psi
-	write(1002,'(7(E14.8,2X))') Et_00, Er10, Er20, Ef(1), Er1_prime, Er2_prime, b_contact
-	write(1003, '(E14.8)') SUM(Ef)/E0
-	write(1004, *) NPHIT
-        write(1111, '(2(E14.8,2X))') sqrt(DOT_PRODUCT(VREL0,VREL0)), sqrt(DOT_PRODUCT(VRELF,VRELF)) 
-	flush(1001); flush(1002); flush(1003); flush(1004); flush(1111)
+	! Buffer outputs instead of direct write
+	buffer_idx = buffer_idx + 1
 
-	!write(1003,'(E14.8)') proj_area
+	chi_buffer(buffer_idx, 1) = b_impact
+	chi_buffer(buffer_idx, 2) = chi
+	chi_buffer(buffer_idx, 3) = psi
+
+	ef_buffer(buffer_idx, 1) = Et_00
+	ef_buffer(buffer_idx, 2) = Er10
+	ef_buffer(buffer_idx, 3) = Er20
+	ef_buffer(buffer_idx, 4) = Ef(1)
+	ef_buffer(buffer_idx, 5) = Er1_prime
+	ef_buffer(buffer_idx, 6) = Er2_prime
+	ef_buffer(buffer_idx, 7) = b_contact
+
+	econs_buffer(buffer_idx) = SUM(Ef)/E0
+	nphit_buffer(buffer_idx) = NPHIT
+	prerot_buffer(buffer_idx, 1) = sqrt(DOT_PRODUCT(VREL0,VREL0))
+	prerot_buffer(buffer_idx, 2) = sqrt(DOT_PRODUCT(VRELF,VRELF))
+
+	! Flush if buffer full
+	IF (buffer_idx >= MAX_BUFFER) THEN
+		CALL FLUSH_BUFFERS()
+	END IF
+
 	NHIT = NHIT + 1
 	IF(NHIT.GT.NSAMPLES) SIM_CONTINUE = .False.
 	return	

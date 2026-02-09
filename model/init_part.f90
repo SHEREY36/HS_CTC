@@ -7,6 +7,7 @@
 	USE CONSTANTS
 	use run_param
 	use output
+!$ use omp_lib
 
 	implicit none
 	INTEGER :: I, J
@@ -15,10 +16,25 @@
 	DOUBLE PRECISION :: VS, pV
 	DOUBLE PRECISION :: WS, pW
 	DOUBLE PRECISION :: spdmax
-	
+
 	double precision, dimension(3) :: v1com, v2com, vcom
 	double precision, dimension(3) :: RVEL, RPOS
-	
+
+	! Thread-safe random number generation
+	INTEGER :: thread_id, seed_size
+	INTEGER, ALLOCATABLE :: seed(:)
+
+	! Get thread ID (0 in serial mode)
+	thread_id = 0
+!$ thread_id = omp_get_thread_num()
+
+	! Initialize thread-specific random seed
+	CALL RANDOM_SEED(size=seed_size)
+	ALLOCATE(seed(seed_size))
+	seed = 12345 + thread_id * 100000 + NTRY  ! Unique per thread/iteration
+	CALL RANDOM_SEED(put=seed)
+	DEALLOCATE(seed)
+
 	! Sample Position
 	POS(1,:) = (/0.D0, 0.D0, 0.D0/)
 	POS(2,1) = BMAX
@@ -112,8 +128,8 @@
 		DOT_PRODUCT(OMEGA(2,:),OMEGA(2,:)))
         Er_00 = moI(2)*(DOT_PRODUCT(OMEGA(1,:),OMEGA(1,:)) +&
 		DOT_PRODUCT(OMEGA(2,:),OMEGA(2,:)))
-	Er1 = moI(2)*DOT_PRODUCT(OMEGA(1,:),OMEGA(1,:))
-	Er2 = moI(2)*DOT_PRODUCT(OMEGA(2,:),OMEGA(2,:))
+	Er_1 = moI(2)*DOT_PRODUCT(OMEGA(1,:),OMEGA(1,:))
+	Er_2 = moI(2)*DOT_PRODUCT(OMEGA(2,:),OMEGA(2,:))
         Et_00 = MASS*(DOT_PRODUCT(V1COM,V1COM) + DOT_PRODUCT(V2COM,V2COM))
 	
 	
