@@ -13,6 +13,9 @@
 !---------------------------------------------------------
 	CHARACTER(LEN=300) :: filepath
 
+	! Create output directory if it does not exist
+	CALL EXECUTE_COMMAND_LINE('mkdir -p ' // TRIM(output_dir))
+
 	filepath = TRIM(output_dir) // '/csx.txt'
 	open(unit=1000, status='replace', file=filepath)
 
