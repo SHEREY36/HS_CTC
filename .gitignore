@@ -17,5 +17,5 @@ test/
 *~
 .vscode/
 
-# Claude
+# Local dev files
 CLAUDE.md
