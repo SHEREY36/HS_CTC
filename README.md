@@ -1,6 +1,6 @@
 # HS_CTC — Hard-Sphere Spherocylinder Collision Trajectory Code
 
-Fortran DEM (Discrete Element Method) code for simulating binary collisions between two spherocylinder particles, used to study the **coefficient of tangential curvature (CTC)** in granular gas models.
+Fortran DEM (Discrete Element Method) code for simulating binary collisions between two spherocylinder particles, used to study the **Classical Trajectory Calculations (CTC)** in granular gas models.
 
 ---
 
