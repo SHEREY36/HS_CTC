@@ -16,10 +16,14 @@
 
 	LOGICAL :: SIM_CONTINUE
 
-	! Output directory for files
+	! Output directory for files (shared - read-only after initialization)
 	CHARACTER(LEN=255) :: output_dir
 
-	! Output buffers (thread-private, will be used with OpenMP)
+	! Per-collision output variables: each thread tracks its own collision
+	!$OMP THREADPRIVATE(HIT, VREL0, WREL0, PROJ_AREA, E0, Er_00, Et_00, &
+	!$OMP&             Er_1, Er_2, TMEAN, RMEAN, b_impact, b_contact)
+
+	! Output buffers (thread-private: each thread accumulates its own data)
 	INTEGER, PARAMETER :: MAX_BUFFER = 1000
 	DOUBLE PRECISION, DIMENSION(MAX_BUFFER, 3) :: chi_buffer
 	DOUBLE PRECISION, DIMENSION(MAX_BUFFER, 7) :: ef_buffer
@@ -27,12 +31,15 @@
 	INTEGER, DIMENSION(MAX_BUFFER) :: nphit_buffer
 	DOUBLE PRECISION, DIMENSION(MAX_BUFFER, 2) :: prerot_buffer
 	INTEGER :: buffer_idx
+	!$OMP THREADPRIVATE(chi_buffer, ef_buffer, econs_buffer, nphit_buffer, &
+	!$OMP&             prerot_buffer, buffer_idx)
 
 	contains
 
 	SUBROUTINE FLUSH_BUFFERS()
 		INTEGER :: i
 		IF (buffer_idx > 0) THEN
+!$OMP CRITICAL(file_write)
 			DO i = 1, buffer_idx
 				write(1001,'(3(E14.8,2X))') chi_buffer(i,:)
 				write(1002,'(7(E14.8,2X))') ef_buffer(i,:)
@@ -41,8 +48,9 @@
 				write(1111,'(2(E14.8,2X))') prerot_buffer(i,:)
 			END DO
 			flush(1001); flush(1002); flush(1003); flush(1004); flush(1111)
+!$OMP END CRITICAL(file_write)
 			buffer_idx = 0
 		END IF
 	END SUBROUTINE FLUSH_BUFFERS
 
-	end module output	
+	end module output

@@ -81,6 +81,8 @@
 		IF(MOD(NTRY, 1000) == 0) write(*,*) 'Number of samples: ', NTRY
 !$OMP END MASTER
 	END DO
+	! Each thread flushes its own remaining buffered data before the region ends
+	CALL FLUSH_BUFFERS()
 !$OMP END PARALLEL
 
 	write(*,*) 'Number of hits: ', NHIT-1

@@ -35,6 +35,10 @@
 	LOGICAL :: PREV_CONTACT, CONTACT
 	! Number of Particle Hits
 	INTEGER :: NPHIT
+
+	! Per-collision state: each thread runs an independent collision
+	!$OMP THREADPRIVATE(POS, VEL, F, U, UX, UY, OMEGA, TAU, &
+	!$OMP&             PREV_CONTACT, CONTACT, NPHIT)
 	CONTAINS
-	
+
 	END MODULE PARTICLES

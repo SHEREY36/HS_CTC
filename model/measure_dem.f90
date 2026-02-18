@@ -62,7 +62,13 @@
 		CALL FLUSH_BUFFERS()
 	END IF
 
+!$OMP ATOMIC
 	NHIT = NHIT + 1
-	IF(NHIT.GT.NSAMPLES) SIM_CONTINUE = .False.
-	return	
+!$OMP END ATOMIC
+	IF(NHIT.GT.NSAMPLES) THEN
+!$OMP CRITICAL
+		SIM_CONTINUE = .False.
+!$OMP END CRITICAL
+	END IF
+	return
 	end subroutine measure_dem
