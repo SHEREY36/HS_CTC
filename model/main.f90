@@ -15,13 +15,21 @@
 	real :: xint
 	INTEGER :: num_threads
 
+	! Saved pre-collision state for elastic replay (PRIVATE per thread)
+	DOUBLE PRECISION :: POS_SAVE(2,3), VEL_SAVE(2,3), OMEGA_SAVE(2,3)
+	DOUBLE PRECISION :: U_SAVE(2,3), UX_SAVE(2,3), UY_SAVE(2,3)
+
 	write(*,*) 'Reading and initializing'
 	call read_input()
 	call INITIALIZE()
 
-	! Initialize buffer indices
+	! Initialize buffer indices (all THREADPRIVATE)
 !$OMP PARALLEL
-	buffer_idx = 0
+	buffer_idx        = 0
+	buffer_ftr_idx    = 0
+	buffer_orient_idx = 0
+	buffer_uvec_idx   = 0
+	ELASTIC_PASS      = .FALSE.
 !$OMP END PARALLEL
 
 	! Report thread count
@@ -31,45 +39,65 @@
 
 	write(*,*) 'Beginning collisions'
 
-!$OMP PARALLEL PRIVATE(R12, E12, D12, RV12) &
+!$OMP PARALLEL PRIVATE(R12, E12, D12, RV12,      &
+!$OMP&    POS_SAVE, VEL_SAVE, OMEGA_SAVE,          &
+!$OMP&    U_SAVE, UX_SAVE, UY_SAVE)                &
 !$OMP SHARED(NTRY, NHIT, SIM_CONTINUE, NSAMPLES)
 	DO WHILE(SIM_CONTINUE)
 		CALL INIT_PART()
+
+		! Safety initialisation: if elastic pass misses, f_tr uses Et_00
+		Et_f_elastic = Et_00
+		Er_f_elastic = Er_00
+
+		! Save pre-collision particle state for inelastic replay
+		POS_SAVE = POS;   VEL_SAVE = VEL;   OMEGA_SAVE = OMEGA
+		U_SAVE   = U;     UX_SAVE  = UX;    UY_SAVE    = UY
+
+		! ---- ELASTIC PASS (first) ----
+		ELASTIC_PASS = .TRUE.
 		DO WHILE(.TRUE.)
 			PREV_CONTACT = CONTACT
 			CALL INTEGRATE_EOM
-			IF(.NOT.PREV_CONTACT.AND.CONTACT) NPHIT = NPHIT + 1 
+			IF(.NOT.PREV_CONTACT.AND.CONTACT) NPHIT = NPHIT + 1
 
-			! Exit Conditions
 			R12 = POS(2,:) - POS(1,:)
 			D12 = SQRT(DOT_PRODUCT(R12,R12))
 			E12 = VEL(2,:) - VEL(1,:)
 			E12 = E12/SQRT(DOT_PRODUCT(E12,E12))
 			RV12 = DOT_PRODUCT(E12,R12)
 
-			!write(2925, '(I1,/)') 2
-			!DO I = 1, 2
-			!     ! Calculate Euler angles from orientation vector
-	 		!     ! Ovito's body frame x-axis is in the negative direction of z-x-y
-	                !     yaw = atan2(U(I,2), U(I,1))
-	                !     pitch = atan2(-U(I,3), sqrt(U(I,1)**2 + U(I,2)**2))
-	                !     roll = 0.0d0
-
-	                !     ! Convert Euler angles to quaternion
-	                !     q0 = cos(yaw/2) * cos(pitch/2) * cos(roll/2) + sin(yaw/2) * sin(pitch/2) * sin(roll/2)
-    	                !     q1 = sin(yaw/2) * cos(pitch/2) * cos(roll/2) - cos(yaw/2) * sin(pitch/2) * sin(roll/2)
-    	                !     q2 = cos(yaw/2) * sin(pitch/2) * cos(roll/2) + sin(yaw/2) * cos(pitch/2) * sin(roll/2)
-    	                !     q3 = cos(yaw/2) * cos(pitch/2) * sin(roll/2) - sin(yaw/2) * sin(pitch/2) * cos(roll/2)
-                        !     xint = real(i)
-	 
-                        !     write(2925,'(18(E14.8,2X))') xint, POS(I,1), POS(I,2), POS(I,3), VEL(I,1), VEL(I,2), VEL(I,3), &
-			!		DIA*0.5D0, DIA*0.5D0, 0.0D0, lcyl, q1, q2, q3, -q0, OMEGA(I,1), OMEGA(I,2), OMEGA(I,3)        
-	                !END DO
-		        !flush(2925)
 			IF(RV12.GE.0.D0.AND.D12.GT.BMAX&
 				.AND.SUM(F).LT.SMALL_NUM.AND.&
 				SUM(TAU).LT.SMALL_NUM) EXIT
 		END DO
+		! Stores Et_f_elastic / Er_f_elastic and returns early
+		IF(HIT) CALL MEASURE_DEM
+		ELASTIC_PASS = .FALSE.
+
+		! Restore particle state for inelastic pass
+		POS = POS_SAVE;   VEL = VEL_SAVE;   OMEGA = OMEGA_SAVE
+		U   = U_SAVE;     UX  = UX_SAVE;    UY    = UY_SAVE
+		CONTACT = .FALSE.; PREV_CONTACT = .FALSE.
+		NPHIT = 0;         HIT = .FALSE.
+
+		! ---- INELASTIC PASS (second) ----
+		DO WHILE(.TRUE.)
+			PREV_CONTACT = CONTACT
+			CALL INTEGRATE_EOM
+			IF(.NOT.PREV_CONTACT.AND.CONTACT) NPHIT = NPHIT + 1
+
+			R12 = POS(2,:) - POS(1,:)
+			D12 = SQRT(DOT_PRODUCT(R12,R12))
+			E12 = VEL(2,:) - VEL(1,:)
+			E12 = E12/SQRT(DOT_PRODUCT(E12,E12))
+			RV12 = DOT_PRODUCT(E12,R12)
+
+			IF(RV12.GE.0.D0.AND.D12.GT.BMAX&
+				.AND.SUM(F).LT.SMALL_NUM.AND.&
+				SUM(TAU).LT.SMALL_NUM) EXIT
+		END DO
+		! Computes f_tr, b_out, orient/uvec descriptors and buffers all outputs
 		IF(HIT) CALL MEASURE_DEM
 
 !$OMP ATOMIC
@@ -86,8 +114,8 @@
 !$OMP END PARALLEL
 
 	write(*,*) 'Number of hits: ', NHIT-1
-	
-		
+
+
 	write(*,*) 'Recording Final State'
 	call measure_final()
 

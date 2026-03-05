@@ -40,6 +40,15 @@
 	filepath = TRIM(output_dir) // '/PreRotEnergy.txt'
 	open(unit=1111, status='replace', file=filepath)
 
+	filepath = TRIM(output_dir) // '/ftr_data.txt'
+	open(unit=1005, status='replace', file=filepath)
+
+	filepath = TRIM(output_dir) // '/orient.dat'
+	open(unit=1006, status='replace', file=filepath)
+
+	filepath = TRIM(output_dir) // '/uvec.dat'
+	open(unit=1007, status='replace', file=filepath)
+
 	!open(unit=2925, status='replace', file='ovito.txt')
 
 ! Particle Properties
