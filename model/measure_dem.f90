@@ -13,6 +13,7 @@
 	double precision :: chi, psi, Er10, Er20, Er1_prime, Er2_prime
 	double precision :: b_out, vrelf_unit(3), rpos12(3), rposf_out(3), vrelf_norm
 	double precision :: delta_Et_inel, delta_Et_el, delta_E_diss, f_tr
+	logical :: keep_hit
 
 	! Scattering Angle
 	VRELF = VEL(2,:) - VEL(1,:)
@@ -74,6 +75,16 @@
 		b_out = 0.0D0
 	END IF
 
+	keep_hit = .FALSE.
+!$OMP CRITICAL(hit_count)
+	IF (NHIT < NSAMPLES) THEN
+		NHIT = NHIT + 1
+		keep_hit = .TRUE.
+		IF (NHIT >= NSAMPLES) SIM_CONTINUE = .FALSE.
+	END IF
+!$OMP END CRITICAL(hit_count)
+	IF (.NOT.keep_hit) RETURN
+
 	! Buffer all outputs
 	buffer_idx       = buffer_idx       + 1
 	buffer_ftr_idx   = buffer_ftr_idx   + 1
@@ -124,15 +135,6 @@
 	! Flush if buffer full
 	IF (buffer_idx >= MAX_BUFFER) THEN
 		CALL FLUSH_BUFFERS()
-	END IF
-
-!$OMP ATOMIC
-	NHIT = NHIT + 1
-!$OMP END ATOMIC
-	IF(NHIT.GT.NSAMPLES) THEN
-!$OMP CRITICAL
-		SIM_CONTINUE = .False.
-!$OMP END CRITICAL
 	END IF
 	return
 	end subroutine measure_dem

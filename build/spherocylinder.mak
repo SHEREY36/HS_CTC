@@ -10,6 +10,7 @@ MODDIR = /home/muhammed/Documents/Thesis/HS_CTC/model/mod
 
 MODOBJS = \
 constants_mod.o \
+rng_mod.o \
 output_mod.o \
 particle_mod.o \
 run_param_mod.o
@@ -40,6 +41,9 @@ constants_mod.o : $(MODDIR)/constants_mod.f90
 	$(FC) $(FCFLAGS) -c $<
 	
 output_mod.o : $(MODDIR)/output_mod.f90
+	$(FC) $(FCFLAGS) -c $<
+
+rng_mod.o : $(MODDIR)/rng_mod.f90
 	$(FC) $(FCFLAGS) -c $<
 
 # Other

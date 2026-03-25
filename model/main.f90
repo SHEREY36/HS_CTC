@@ -5,6 +5,7 @@
 	use particles
 	use output
 	use constants
+	use rng_mod
 !$ use omp_lib
 
 	implicit none
@@ -14,6 +15,7 @@
         INTEGER :: I
 	real :: xint
 	INTEGER :: num_threads
+	INTEGER :: thread_id
 
 	! Saved pre-collision state for elastic replay (PRIVATE per thread)
 	DOUBLE PRECISION :: POS_SAVE(2,3), VEL_SAVE(2,3), OMEGA_SAVE(2,3)
@@ -22,15 +24,6 @@
 	write(*,*) 'Reading and initializing'
 	call read_input()
 	call INITIALIZE()
-
-	! Initialize buffer indices (all THREADPRIVATE)
-!$OMP PARALLEL
-	buffer_idx        = 0
-	buffer_ftr_idx    = 0
-	buffer_orient_idx = 0
-	buffer_uvec_idx   = 0
-	ELASTIC_PASS      = .FALSE.
-!$OMP END PARALLEL
 
 	! Report thread count
 	num_threads = 1
@@ -41,8 +34,17 @@
 
 !$OMP PARALLEL PRIVATE(R12, E12, D12, RV12,      &
 !$OMP&    POS_SAVE, VEL_SAVE, OMEGA_SAVE,          &
-!$OMP&    U_SAVE, UX_SAVE, UY_SAVE)                &
+!$OMP&    U_SAVE, UX_SAVE, UY_SAVE, thread_id)     &
 !$OMP SHARED(NTRY, NHIT, SIM_CONTINUE, NSAMPLES)
+		thread_id = 0
+!$	thread_id = omp_get_thread_num()
+		call init_thread_rng(thread_id)
+		buffer_idx        = 0
+		buffer_ftr_idx    = 0
+		buffer_orient_idx = 0
+		buffer_uvec_idx   = 0
+		ELASTIC_PASS      = .FALSE.
+
 	DO WHILE(SIM_CONTINUE)
 		CALL INIT_PART()
 
@@ -113,7 +115,7 @@
 	CALL FLUSH_BUFFERS()
 !$OMP END PARALLEL
 
-	write(*,*) 'Number of hits: ', NHIT-1
+	write(*,*) 'Number of hits: ', NHIT
 
 
 	write(*,*) 'Recording Final State'

@@ -106,7 +106,8 @@
 
 ! For Outputs
 !---------------------------------------------------------
-	NHIT = 1
+	NHIT = 0
+	NTRY = 0
 	TMEAN = 0.D0; RMEAN = 0.D0
 	SIM_CONTINUE = .TRUE.
 	return

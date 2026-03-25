@@ -7,6 +7,7 @@
 	USE CONSTANTS
 	use run_param
 	use output
+	use rng_mod
 !$ use omp_lib
 
 	implicit none
@@ -20,37 +21,22 @@
 	double precision, dimension(3) :: v1com, v2com, vcom
 	double precision, dimension(3) :: RVEL, RPOS
 
-	! Thread-safe random number generation
-	INTEGER :: thread_id, seed_size
-	INTEGER, ALLOCATABLE :: seed(:)
-
-	! Get thread ID (0 in serial mode)
-	thread_id = 0
-!$ thread_id = omp_get_thread_num()
-
-	! Initialize thread-specific random seed
-	CALL RANDOM_SEED(size=seed_size)
-	ALLOCATE(seed(seed_size))
-	seed = 12345 + thread_id * 100000 + NTRY  ! Unique per thread/iteration
-	CALL RANDOM_SEED(put=seed)
-	DEALLOCATE(seed)
-
 	! Sample Position
 	POS(1,:) = (/0.D0, 0.D0, 0.D0/)
 	POS(2,1) = BMAX
 	DO I = 2,3
-		CALL RANDOM_NUMBER(RR)
+		RR = RNG_UNIFORM()
 		POS(2,I) = BMAX*RR
 	END DO
 	
 	! Sample Orientation Vectors
 	DO I = 1,2
-		CALL RANDOM_NUMBER(RR); PHI = ACOS(RR*2.D0 - 1.D0)
-		CALL RANDOM_NUMBER(RR); THETA = 2.D0*RR*PI
+		RR = RNG_UNIFORM(); PHI = ACOS(RR*2.D0 - 1.D0)
+		RR = RNG_UNIFORM(); THETA = 2.D0*RR*PI
 		U(I,:) = (/SIN(PHI)*COS(THETA), SIN(PHI)*SIN(THETA), COS(PHI)/)
 		U(I,:) = U(I,:)/SQRT(DOT_PRODUCT(U(I,:),U(I,:)))
-		CALL RANDOM_NUMBER(RR); PHI = ACOS(RR*2.D0 - 1.D0)
-		CALL RANDOM_NUMBER(RR); THETA = 2.D0*RR*PI
+		RR = RNG_UNIFORM(); PHI = ACOS(RR*2.D0 - 1.D0)
+		RR = RNG_UNIFORM(); THETA = 2.D0*RR*PI
 		UX(I,:) = (/SIN(PHI)*COS(THETA), SIN(PHI)*SIN(THETA), COS(PHI)/)
 		UX(I,:) = UX(I,:) - DOT_PRODUCT(UX(I,:),U(I,:))*U(I,:)
 		UX(I,:) = UX(I,:)/SQRT(DOT_PRODUCT(UX(I,:),UX(I,:)))
@@ -65,9 +51,9 @@
 	OMEGA(1,1) = 0.D0; OMEGA(2,1) = 0.D0
 	IF(ToE.EQ.'T') THEN
 		DO WHILE(.TRUE.)
-			CALL RANDOM_NUMBER(RR)
+			RR = RNG_UNIFORM()
 			VS = RR*VMAX; pV = (VS**3.D0)*EXP(-(VS**2.D0)*0.25D0)
-			CALL RANDOM_NUMBER(RR)
+			RR = RNG_UNIFORM()
 			IF(pV.GT.VMAX) THEN
 				write(*,*) '>vmax'
 				stop
@@ -76,22 +62,22 @@
 		END DO
 		VEL(1,1) = VS*SQRT(kTm)
 		! Sample Angular Velocities
-		DO I = 1,2
-			J = 1
-			DO WHILE(J.LE.2)
-				CALL RANDOM_NUMBER(RR)
-				WS = 2.D0*RR*WMAX-WMAX; pW = exp(-(ws**2.D0)*0.5D0)
-				CALL RANDOM_NUMBER(RR)
-				IF(pW.GT.RR*WMAX) THEN
-					OMEGA(I,J+1) = WS*SQRT(kTI)
-					J = J + 1
+			DO I = 1,2
+				J = 1
+				DO WHILE(J.LE.2)
+					RR = RNG_UNIFORM()
+					WS = 2.D0*RR*WMAX-WMAX; pW = exp(-(ws**2.D0)*0.5D0)
+					RR = RNG_UNIFORM()
+					IF(pW.GT.RR*WMAX) THEN
+						OMEGA(I,J+1) = WS*SQRT(kTI)
+						J = J + 1
 				END IF
 			END DO
 		END DO
 	ELSE IF(ToE.EQ.'E') THEN
-		CALL RANDOM_NUMBER(RR)
+		RR = RNG_UNIFORM()
 		OMEGA(1,2) = SQEr*RR; OMEGA(1,3) = SQEr*(1.D0-RR)
-		CALL RANDOM_NUMBER(RR)
+		RR = RNG_UNIFORM()
 		OMEGA(2,2) = SQEr*RR; OMEGA(2,3) = SQEr*(1.D0-RR)
 		VEL(1,1) = SQEk
 	ELSE
@@ -103,9 +89,8 @@
 	F(:,:) = 0.D0
 	TAU(:,:) = 0.D0
 	
-	! Record initial conditions
-	UX(I,:) = UX(I,:) - DOT_PRODUCT(UX(I,:),U(I,:))*U(I,:)
-	RPOS = POS(2,:) - POS(1,:); RVEL = VEL(2,:) - VEL(1,:)
+		! Record initial conditions
+		RPOS = POS(2,:) - POS(1,:); RVEL = VEL(2,:) - VEL(1,:)
 	RPOS = RPOS - DOT_PRODUCT(RVEL,RPOS)&
 		*RVEL/DOT_PRODUCT(RVEL,RVEL)
 	b_impact = SQRT(DOT_PRODUCT(RPOS,RPOS))
@@ -149,4 +134,3 @@
 	CONTACT = .FALSE.; NPHIT = 0
 	RETURN
 	end subroutine INIT_PART
-

@@ -6,7 +6,7 @@
 	implicit none
 	DOUBLE PRECISION, DIMENSION(3) :: RHO1, RHO2, E21
 	DOUBLE PRECISION, DIMENSION(3) :: C1R1, C2R2
-	DOUBLE PRECISION, DIMENSION(3) :: VR, OMEGAI, OMEGAJ, V_ROT
+	DOUBLE PRECISION, DIMENSION(3) :: VR, OMEGAI, OMEGAJ, V_ROT, VREL_CONTACT
 	DOUBLE PRECISION :: VRN
 	DOUBLE PRECISION :: DISTSQ, DN
 	DOUBLE PRECISION :: FC, FK, FTOTAL(3)
@@ -23,16 +23,20 @@
 	CALL OVERLAP_PP(DISTSQ, RHO1, RHO2, E21, LAMBDA_TMP, MU_TMP)
 	F_TMP(:) = 0.0D0
 
-	! Translational relative velocity
+	! Translational relative velocity (particle j relative to particle i)
 	VR = VEL(2,:) - VEL(1,:)
 
-	! calculate the rotational relative velocity
-        OMEGAI = OMEGA(I,2)*UX(I,:) + OMEGA(I,3)*UY(I,:);
-        OMEGAJ = OMEGA(J,2)*UX(J,:) + OMEGA(J,3)*UY(J,:);
-        V_ROT = CROSSPRDCT(RHO2,OMEGAJ) - CROSSPRDCT(RHO1,OMEGAI)
+	! Contact-point rotational velocity.
+	! For smooth spherocylinders the twist about the symmetry axis does not
+	! contribute, so only the components perpendicular to U are retained here.
+	OMEGAI = OMEGA(I,2)*UX(I,:) + OMEGA(I,3)*UY(I,:)
+	OMEGAJ = OMEGA(J,2)*UX(J,:) + OMEGA(J,3)*UY(J,:)
+	V_ROT = CROSSPRDCT(OMEGAJ, RHO2) - CROSSPRDCT(OMEGAI, RHO1)
+	VREL_CONTACT = VR + V_ROT
 
-	! Normal component of relative velocity (scalar)
-	VRN = -(DOT_PRODUCT(VR, E21))
+	! Normal approach speed at the contact point.
+	! Positive VRN means the surfaces approach along the contact normal E21.
+	VRN = -(DOT_PRODUCT(VREL_CONTACT, E21))
 
 	CONTACT = .FALSE.
 	IF(DISTSQ.GT.(DIA-SMALL_NUM)**2.D0) RETURN
