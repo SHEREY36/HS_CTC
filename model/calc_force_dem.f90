@@ -32,7 +32,7 @@
 	OMEGAI = OMEGA(I,2)*UX(I,:) + OMEGA(I,3)*UY(I,:)
 	OMEGAJ = OMEGA(J,2)*UX(J,:) + OMEGA(J,3)*UY(J,:)
 	V_ROT = CROSSPRDCT(OMEGAJ, RHO2) - CROSSPRDCT(OMEGAI, RHO1)
-	VREL_CONTACT = VR + V_ROT
+	VREL_CONTACT = VR !+ V_ROT
 
 	! Normal approach speed at the contact point.
 	! Positive VRN means the surfaces approach along the contact normal E21.
