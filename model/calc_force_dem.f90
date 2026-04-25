@@ -168,11 +168,13 @@
 	END SUBROUTINE PROJECTED_AREA
 !-------------------------------------------------------------------
 	SUBROUTINE CALC_ORIENTATION_AT_CONTACT(E21_in, VRN_in)
-	USE PARTICLES, ONLY: U, MASS
+	USE PARTICLES, ONLY: U, MASS, POS
 	USE OUTPUT
+	USE CONSTANTS, ONLY: SMALL_NUM
 	IMPLICIT NONE
 	DOUBLE PRECISION, INTENT(IN) :: E21_in(3), VRN_in
 	DOUBLE PRECISION :: vhat(3), vnorm
+	DOUBLE PRECISION :: r12_fc(3), r12_fc_hat(3), r12_fc_norm
 	DOUBLE PRECISION :: a12, a1n, a2n, a1v, a2v
 
 	! Unit approach-velocity vector (pre-collision, from output module)
@@ -181,6 +183,15 @@
 		vhat = VREL0 / vnorm
 	ELSE
 		vhat = E21_in   ! degenerate: use contact normal as fallback
+	END IF
+
+	r12_fc = POS(2,:) - POS(1,:)
+	r12_fc_norm = SQRT(DOT_PRODUCT(r12_fc, r12_fc))
+	IF (r12_fc_norm > SMALL_NUM .AND. vnorm > SMALL_NUM) THEN
+		r12_fc_hat = r12_fc / r12_fc_norm
+		mu_in = ABS(DOT_PRODUCT(r12_fc_hat, vhat))
+	ELSE
+		mu_in = 0.0D0
 	END IF
 
 	! Dot products (signed; headless symmetry handled in S2 via squaring)

@@ -174,7 +174,7 @@ All files are written to the specified `output_dir`.
 
 | File | Columns | Description |
 |------|---------|-------------|
-| `chi.txt` | b, χ, ψ | Impact parameter, scattering angle (translational), scattering angle (rotational) |
+| `chi.txt` | b, χ, ψ, μ_in | Impact parameter, scattering angle (translational), scattering angle (rotational), first-contact CoM-to-CoM cosine with incoming direction |
 | `Ef.txt` | Et₀, Er1₀, Er2₀, Et_f, Er1_f, Er2_f, b_c | Pre/post-collision energies + contact impact parameter |
 | `EnergyCons.txt` | E_f/E_0 | Energy conservation ratio (should be ≤ 1 for inelastic) |
 | `NPhit.txt` | N | Number of contact points per collision |

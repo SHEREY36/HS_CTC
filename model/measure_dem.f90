@@ -94,6 +94,7 @@
 	chi_buffer(buffer_idx, 1) = b_impact
 	chi_buffer(buffer_idx, 2) = chi
 	chi_buffer(buffer_idx, 3) = psi
+	chi_buffer(buffer_idx, 4) = mu_in
 
 	ef_buffer(buffer_idx, 1) = Et_00
 	ef_buffer(buffer_idx, 2) = Er10

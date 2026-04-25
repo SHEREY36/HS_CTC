@@ -130,6 +130,7 @@
 	! For calls to outputs
 	VREL0 = VEL(2,:) - VEL(1,:)
 	WREL0 = OMEGA(2,:) - OMEGA(1,:)
+	mu_in = 0.D0
 	HIT = .FALSE.
 	CONTACT = .FALSE.; NPHIT = 0
 	RETURN

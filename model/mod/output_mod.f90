@@ -19,6 +19,7 @@
 
 	! Contact geometry (saved at first contact, normalised by hLCYL)
 	DOUBLE PRECISION :: contact_lambda, contact_mu
+	DOUBLE PRECISION :: mu_in
 
 	! Nematic order scalars at first contact
 	DOUBLE PRECISION :: S2_pair, S2_1n, S2_2n, S2_1v, S2_2v
@@ -40,7 +41,7 @@
 	!$OMP THREADPRIVATE(HIT, VREL0, WREL0, PROJ_AREA, E0, Er_00, Et_00,        &
 	!$OMP&             Er_1, Er_2, TMEAN, RMEAN, b_impact, b_contact,            &
 	!$OMP&             Et_f_elastic, Er_f_elastic,                                &
-	!$OMP&             contact_lambda, contact_mu,                                &
+	!$OMP&             contact_lambda, contact_mu, mu_in,                         &
 	!$OMP&             S2_pair, S2_1n, S2_2n, S2_1v, S2_2v,                      &
 	!$OMP&             cos_u1_n, cos_u2_n, cos_u1_v, cos_u2_v, u1u2_dot,         &
 	!$OMP&             U1_pre, U2_pre, U1_post, U2_post, E_n_pre)
@@ -51,7 +52,7 @@
 
 	! Output buffers (thread-private: each thread accumulates its own data)
 	INTEGER, PARAMETER :: MAX_BUFFER = 1000
-	DOUBLE PRECISION, DIMENSION(MAX_BUFFER, 3) :: chi_buffer
+	DOUBLE PRECISION, DIMENSION(MAX_BUFFER, 4) :: chi_buffer
 	DOUBLE PRECISION, DIMENSION(MAX_BUFFER, 7) :: ef_buffer
 	DOUBLE PRECISION, DIMENSION(MAX_BUFFER)    :: econs_buffer
 	INTEGER,          DIMENSION(MAX_BUFFER)    :: nphit_buffer
@@ -85,7 +86,7 @@
 		IF (buffer_idx > 0) THEN
 !$OMP CRITICAL(file_write)
 			DO i = 1, buffer_idx
-				write(1001,'(3(E14.8,2X))') chi_buffer(i,:)
+				write(1001,'(4(E14.8,2X))') chi_buffer(i,:)
 				write(1002,'(7(E14.8,2X))') ef_buffer(i,:)
 				write(1003,'(E14.8)')        econs_buffer(i)
 				write(1004,*)                nphit_buffer(i)
