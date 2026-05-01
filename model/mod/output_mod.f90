@@ -52,7 +52,7 @@
 
 	! Output buffers (thread-private: each thread accumulates its own data)
 	INTEGER, PARAMETER :: MAX_BUFFER = 1000
-	DOUBLE PRECISION, DIMENSION(MAX_BUFFER, 4) :: chi_buffer
+	DOUBLE PRECISION, DIMENSION(MAX_BUFFER, 10) :: chi_buffer
 	DOUBLE PRECISION, DIMENSION(MAX_BUFFER, 7) :: ef_buffer
 	DOUBLE PRECISION, DIMENSION(MAX_BUFFER)    :: econs_buffer
 	INTEGER,          DIMENSION(MAX_BUFFER)    :: nphit_buffer
@@ -86,7 +86,7 @@
 		IF (buffer_idx > 0) THEN
 !$OMP CRITICAL(file_write)
 			DO i = 1, buffer_idx
-				write(1001,'(4(E14.8,2X))') chi_buffer(i,:)
+				write(1001,'(10(E14.8,2X))') chi_buffer(i,:)
 				write(1002,'(7(E14.8,2X))') ef_buffer(i,:)
 				write(1003,'(E14.8)')        econs_buffer(i)
 				write(1004,*)                nphit_buffer(i)

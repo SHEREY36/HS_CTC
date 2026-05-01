@@ -12,6 +12,7 @@
 	double precision :: Ef(2)
 	double precision :: chi, psi, Er10, Er20, Er1_prime, Er2_prime
 	double precision :: b_out, vrelf_unit(3), rpos12(3), rposf_out(3), vrelf_norm
+	double precision :: vrel0_unit(3), vrel0_norm
 	double precision :: delta_Et_inel, delta_Et_el, delta_E_diss, f_tr
 	logical :: keep_hit
 
@@ -72,7 +73,16 @@
 		rposf_out  = rpos12 - DOT_PRODUCT(rpos12, vrelf_unit) * vrelf_unit
 		b_out      = SQRT(DOT_PRODUCT(rposf_out, rposf_out)) / (LCYL + DIA)
 	ELSE
-		b_out = 0.0D0
+		vrelf_unit = 0.0D0
+		b_out      = 0.0D0
+	END IF
+
+	! Pre-collision relative velocity unit vector
+	vrel0_norm = SQRT(DOT_PRODUCT(VREL0, VREL0))
+	IF (vrel0_norm > 1.0D-30) THEN
+		vrel0_unit = VREL0 / vrel0_norm
+	ELSE
+		vrel0_unit = 0.0D0
 	END IF
 
 	keep_hit = .FALSE.
@@ -91,10 +101,16 @@
 	buffer_orient_idx = buffer_orient_idx + 1
 	buffer_uvec_idx  = buffer_uvec_idx  + 1
 
-	chi_buffer(buffer_idx, 1) = b_impact
-	chi_buffer(buffer_idx, 2) = chi
-	chi_buffer(buffer_idx, 3) = psi
-	chi_buffer(buffer_idx, 4) = mu_in
+	chi_buffer(buffer_idx, 1)  = b_impact
+	chi_buffer(buffer_idx, 2)  = chi
+	chi_buffer(buffer_idx, 3)  = psi
+	chi_buffer(buffer_idx, 4)  = mu_in
+	chi_buffer(buffer_idx, 5)  = vrel0_unit(1)   ! ghat_pre_x
+	chi_buffer(buffer_idx, 6)  = vrel0_unit(2)   ! ghat_pre_y
+	chi_buffer(buffer_idx, 7)  = vrel0_unit(3)   ! ghat_pre_z
+	chi_buffer(buffer_idx, 8)  = vrelf_unit(1)   ! ghat_post_x
+	chi_buffer(buffer_idx, 9)  = vrelf_unit(2)   ! ghat_post_y
+	chi_buffer(buffer_idx, 10) = vrelf_unit(3)   ! ghat_post_z
 
 	ef_buffer(buffer_idx, 1) = Et_00
 	ef_buffer(buffer_idx, 2) = Er10
