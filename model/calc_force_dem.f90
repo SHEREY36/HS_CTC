@@ -188,10 +188,12 @@
 	r12_fc = POS(2,:) - POS(1,:)
 	r12_fc_norm = SQRT(DOT_PRODUCT(r12_fc, r12_fc))
 	IF (r12_fc_norm > SMALL_NUM .AND. vnorm > SMALL_NUM) THEN
-		r12_fc_hat = r12_fc / r12_fc_norm
-		mu_in = ABS(DOT_PRODUCT(r12_fc_hat, vhat))
+		r12_fc_hat  = r12_fc / r12_fc_norm
+		mu_in       = ABS(DOT_PRODUCT(r12_fc_hat, vhat))
+		eij_contact = r12_fc_hat
 	ELSE
-		mu_in = 0.0D0
+		mu_in       = 0.0D0
+		eij_contact = 0.0D0
 	END IF
 
 	! Dot products (signed; headless symmetry handled in S2 via squaring)

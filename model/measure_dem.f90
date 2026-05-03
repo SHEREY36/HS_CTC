@@ -105,9 +105,9 @@
 	chi_buffer(buffer_idx, 2)  = chi
 	chi_buffer(buffer_idx, 3)  = psi
 	chi_buffer(buffer_idx, 4)  = mu_in
-	chi_buffer(buffer_idx, 5)  = vrel0_unit(1)   ! ghat_pre_x
-	chi_buffer(buffer_idx, 6)  = vrel0_unit(2)   ! ghat_pre_y
-	chi_buffer(buffer_idx, 7)  = vrel0_unit(3)   ! ghat_pre_z
+	chi_buffer(buffer_idx, 5)  = eij_contact(1)   ! eij_x
+	chi_buffer(buffer_idx, 6)  = eij_contact(2)   ! eij_y
+	chi_buffer(buffer_idx, 7)  = eij_contact(3)   ! eij_z
 	chi_buffer(buffer_idx, 8)  = vrelf_unit(1)   ! ghat_post_x
 	chi_buffer(buffer_idx, 9)  = vrelf_unit(2)   ! ghat_post_y
 	chi_buffer(buffer_idx, 10) = vrelf_unit(3)   ! ghat_post_z

@@ -20,6 +20,7 @@
 	! Contact geometry (saved at first contact, normalised by hLCYL)
 	DOUBLE PRECISION :: contact_lambda, contact_mu
 	DOUBLE PRECISION :: mu_in
+	DOUBLE PRECISION, DIMENSION(3) :: eij_contact   ! contact normal (r12_fc_hat) at first contact
 
 	! Nematic order scalars at first contact
 	DOUBLE PRECISION :: S2_pair, S2_1n, S2_2n, S2_1v, S2_2v
@@ -41,7 +42,7 @@
 	!$OMP THREADPRIVATE(HIT, VREL0, WREL0, PROJ_AREA, E0, Er_00, Et_00,        &
 	!$OMP&             Er_1, Er_2, TMEAN, RMEAN, b_impact, b_contact,            &
 	!$OMP&             Et_f_elastic, Er_f_elastic,                                &
-	!$OMP&             contact_lambda, contact_mu, mu_in,                         &
+	!$OMP&             contact_lambda, contact_mu, mu_in, eij_contact,             &
 	!$OMP&             S2_pair, S2_1n, S2_2n, S2_1v, S2_2v,                      &
 	!$OMP&             cos_u1_n, cos_u2_n, cos_u1_v, cos_u2_v, u1u2_dot,         &
 	!$OMP&             U1_pre, U2_pre, U1_post, U2_post, E_n_pre)
