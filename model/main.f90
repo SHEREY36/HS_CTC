@@ -11,11 +11,8 @@
 	implicit none
 	DOUBLE PRECISION, DIMENSION(3) :: R12, E12
 	DOUBLE PRECISION :: D12, RV12
-        DOUBLE PRECISION :: yaw, pitch, roll, q0, q1, q2, q3
-        INTEGER :: I
-	real :: xint
-	INTEGER :: num_threads
-	INTEGER :: thread_id
+	INTEGER :: num_threads, event_id
+	LOGICAL :: accepted
 
 	! Saved pre-collision state for elastic replay (PRIVATE per thread)
 	DOUBLE PRECISION :: POS_SAVE(2,3), VEL_SAVE(2,3), OMEGA_SAVE(2,3)
@@ -32,20 +29,25 @@
 
 	write(*,*) 'Beginning collisions'
 
-!$OMP PARALLEL PRIVATE(R12, E12, D12, RV12,      &
-!$OMP&    POS_SAVE, VEL_SAVE, OMEGA_SAVE,          &
-!$OMP&    U_SAVE, UX_SAVE, UY_SAVE, thread_id)     &
-!$OMP SHARED(NTRY, NHIT, SIM_CONTINUE, NSAMPLES)
-		thread_id = 0
-!$	thread_id = omp_get_thread_num()
-		call init_thread_rng(thread_id)
+!$OMP PARALLEL PRIVATE(R12, E12, D12, RV12, accepted, &
+!$OMP&    POS_SAVE, VEL_SAVE, OMEGA_SAVE,               &
+!$OMP&    U_SAVE, UX_SAVE, UY_SAVE)                     &
+!$OMP SHARED(NTRY, NHIT, NSAMPLES)
 		buffer_idx        = 0
 		buffer_ftr_idx    = 0
 		buffer_orient_idx = 0
 		buffer_uvec_idx   = 0
+		buffer_closure_idx = 0
 		ELASTIC_PASS      = .FALSE.
 
-	DO WHILE(SIM_CONTINUE)
+	! Each requested event owns a deterministic random stream. Consequently the
+	! same event_id has the same pre-collision state for every alpha and the
+	! result is independent of OpenMP scheduling.
+!$OMP DO SCHEDULE(STATIC)
+	DO event_id = 1, NSAMPLES
+		CALL INIT_THREAD_RNG(event_id - 1, RUN_SEED)
+		accepted = .FALSE.
+		DO WHILE(.NOT.accepted)
 		CALL INIT_PART()
 
 		! Safety initialisation: if elastic pass misses, f_tr uses Et_00
@@ -74,7 +76,7 @@
 				SUM(TAU).LT.SMALL_NUM) EXIT
 		END DO
 		! Stores Et_f_elastic / Er_f_elastic and returns early
-		IF(HIT) CALL MEASURE_DEM
+		IF(HIT) CALL MEASURE_DEM(event_id)
 		ELASTIC_PASS = .FALSE.
 
 		! Restore particle state for inelastic pass
@@ -100,17 +102,20 @@
 				SUM(TAU).LT.SMALL_NUM) EXIT
 		END DO
 		! Computes f_tr, b_out, orient/uvec descriptors and buffers all outputs
-		IF(HIT) CALL MEASURE_DEM
+		IF(HIT) THEN
+			CALL MEASURE_DEM(event_id)
+			accepted = .TRUE.
+!$OMP ATOMIC UPDATE
+			NHIT = NHIT + 1
+!$OMP END ATOMIC
+		END IF
 
-!$OMP ATOMIC
+!$OMP ATOMIC UPDATE
 		NTRY = NTRY + 1
 !$OMP END ATOMIC
-
-		! Progress update (only from master thread)
-!$OMP MASTER
-		IF(MOD(NTRY, 1000) == 0) write(*,*) 'Number of samples: ', NTRY
-!$OMP END MASTER
+		END DO
 	END DO
+!$OMP END DO
 	! Each thread flushes its own remaining buffered data before the region ends
 	CALL FLUSH_BUFFERS()
 !$OMP END PARALLEL

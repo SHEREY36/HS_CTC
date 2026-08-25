@@ -18,15 +18,12 @@
 	DOUBLE PRECISION, DIMENSION(3) :: moI(3), omoI(3)
 	! Temperatures
 	DOUBLE PRECISION :: kTm, kTI
-	DOUBLE PRECISION :: okTm, okTI
 	! Particle Pos/Vel
 	DOUBLE PRECISION, DIMENSION(2,3) :: POS, VEL, F
 	! Particle Orientation
 	DOUBLE PRECISION, DIMENSION(2,3) :: U, UX, UY
 	! Angular velocities along each of the particle axes (not the fixed frame)
 	DOUBLE PRECISION, DIMENSION(2,3) :: OMEGA, TAU
-	! For Sampling
-	DOUBLE PRECISION :: WMAX, VMAX
 	! Energy for Translation / Rotation
 	! Either Temperatures or energies should be defined
 	DOUBLE PRECISION :: Ek, Er, SQEk, SQEr

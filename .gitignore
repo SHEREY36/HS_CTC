@@ -11,6 +11,23 @@ SphCyl
 
 # Test output data
 test/
+test_*/
+smoke_run/
+mu_check_*/
+
+# Closure sweep output and HPC state
+results/
+logs/
+manifests/
+coefficients/
+closure_output/
+_SUCCESS
+validation.json
+
+# Python environments and caches
+.venv/
+__pycache__/
+*.py[cod]
 
 # Editor/IDE
 *.swp
@@ -19,3 +36,5 @@ test/
 
 # Local dev files
 CLAUDE.md
+.codex
+claude_ai_recommended.txt

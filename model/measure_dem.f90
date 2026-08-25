@@ -1,32 +1,43 @@
 
-	subroutine measure_dem()
+	subroutine measure_dem(event_id)
 
 	use run_param
 	use particles
 	use output
+	use, intrinsic :: iso_fortran_env, only: int64
 
 	implicit none
-	integer :: i, j
+	integer, intent(in) :: event_id
 	double precision :: vrelf(3), wrelf(3)
 	double precision, dimension(3) :: v1com, v2com, vcom
 	double precision :: Ef(2)
 	double precision :: chi, psi, Er10, Er20, Er1_prime, Er2_prime
 	double precision :: b_out, vrelf_unit(3), rpos12(3), rposf_out(3), vrelf_norm
 	double precision :: vrel0_unit(3), vrel0_norm
-	double precision :: delta_Et_inel, delta_Et_el, delta_E_diss, f_tr
-	logical :: keep_hit
+	double precision :: delta_E_tr, delta_E_rot, delta_E_total, f_tr
+	double precision :: elastic_rel_error, angle_cos
 
 	! Scattering Angle
 	VRELF = VEL(2,:) - VEL(1,:)
 	chi = SQRT(DOT_PRODUCT(VRELF,VRELF))
 	chi = SQRT(DOT_PRODUCT(VREL0,VREL0))*chi
-	chi = ACOS(DOT_PRODUCT(VRELF,VREL0)/chi)
+	IF (chi > 1.D-30) THEN
+		angle_cos = MAX(-1.D0, MIN(1.D0, DOT_PRODUCT(VRELF,VREL0)/chi))
+		chi = ACOS(angle_cos)
+	ELSE
+		chi = 0.D0
+	END IF
 
 	! Scattering Angle for angular velocity W
 	WRELF = OMEGA(2,:) - OMEGA(1,:)
 	psi = SQRT(DOT_PRODUCT(WRELF,WRELF))
 	psi = SQRT(DOT_PRODUCT(WREL0,WREL0))*psi
-	psi = ACOS(DOT_PRODUCT(WRELF,WREL0)/psi)
+	IF (psi > 1.D-30) THEN
+		angle_cos = MAX(-1.D0, MIN(1.D0, DOT_PRODUCT(WRELF,WREL0)/psi))
+		psi = ACOS(angle_cos)
+	ELSE
+		psi = 0.D0
+	END IF
 
 	! Post-Collision Energy
 	VCOM = (VEL(2,:)+VEL(1,:))*0.5D0
@@ -53,13 +64,15 @@
 	U1_post = U(1,:)
 	U2_post = U(2,:)
 
-	! f_tr: translational dissipation fraction
-	! Uses Et_f_elastic set during the preceding elastic pass
-	delta_Et_inel = Ef(1) - Et_00
-	delta_Et_el   = Et_f_elastic - Et_00
-	delta_E_diss  = E0 - (Ef(1) + Ef(2))
-	IF (ABS(delta_E_diss) > 1.0D-30) THEN
-		f_tr = (delta_Et_inel - delta_Et_el) / delta_E_diss
+	! Positive routing convention: energy present after the elastic replay but
+	! removed by the inelastic replay. Using the elastic final state also
+	! subtracts the integrator's conservative baseline error.
+	delta_E_tr    = Et_f_elastic - Ef(1)
+	delta_E_rot   = Er_f_elastic - Ef(2)
+	delta_E_total = delta_E_tr + delta_E_rot
+	elastic_rel_error = (Et_f_elastic + Er_f_elastic - E0)/MAX(E0, 1.D-30)
+	IF (delta_E_total > 1.0D-30*MAX(E0, 1.D0)) THEN
+		f_tr = delta_E_tr / delta_E_total
 	ELSE
 		f_tr = -999.0D0   ! sentinel: elastic collision, f_tr undefined
 	END IF
@@ -85,21 +98,12 @@
 		vrel0_unit = 0.0D0
 	END IF
 
-	keep_hit = .FALSE.
-!$OMP CRITICAL(hit_count)
-	IF (NHIT < NSAMPLES) THEN
-		NHIT = NHIT + 1
-		keep_hit = .TRUE.
-		IF (NHIT >= NSAMPLES) SIM_CONTINUE = .FALSE.
-	END IF
-!$OMP END CRITICAL(hit_count)
-	IF (.NOT.keep_hit) RETURN
-
-	! Buffer all outputs
-	buffer_idx       = buffer_idx       + 1
-	buffer_ftr_idx   = buffer_ftr_idx   + 1
+	! Buffer legacy outputs when requested.
+	IF (WRITE_LEGACY) THEN
+	buffer_idx        = buffer_idx        + 1
+	buffer_ftr_idx    = buffer_ftr_idx    + 1
 	buffer_orient_idx = buffer_orient_idx + 1
-	buffer_uvec_idx  = buffer_uvec_idx  + 1
+	buffer_uvec_idx   = buffer_uvec_idx   + 1
 
 	chi_buffer(buffer_idx, 1)  = b_impact
 	chi_buffer(buffer_idx, 2)  = chi
@@ -126,8 +130,8 @@
 	prerot_buffer(buffer_idx, 2) = sqrt(DOT_PRODUCT(VRELF,VRELF))
 
 	ftr_buffer(buffer_ftr_idx, 1) = f_tr
-	ftr_buffer(buffer_ftr_idx, 2) = delta_Et_el
-	ftr_buffer(buffer_ftr_idx, 3) = delta_E_diss
+	ftr_buffer(buffer_ftr_idx, 2) = delta_E_tr
+	ftr_buffer(buffer_ftr_idx, 3) = delta_E_total
 
 	orient_buffer(buffer_orient_idx,  1) = S2_pair
 	orient_buffer(buffer_orient_idx,  2) = S2_1n
@@ -148,9 +152,38 @@
 	uvec_buffer(buffer_uvec_idx,  4:6)  = U2_pre
 	uvec_buffer(buffer_uvec_idx,  7:9)  = U1_post
 	uvec_buffer(buffer_uvec_idx, 10:12) = U2_post
+	END IF
+
+	IF (WRITE_CLOSURE) THEN
+		buffer_closure_idx = buffer_closure_idx + 1
+		closure_buffer(buffer_closure_idx,  1) = &
+			DBLE(RUN_SEED*EVENT_ID_STRIDE + INT(event_id, int64))
+		closure_buffer(buffer_closure_idx,  2:4) = C1_pre
+		closure_buffer(buffer_closure_idx,  5:7) = C2_pre
+		closure_buffer(buffer_closure_idx,  8:10) = OMEGA1_lab_pre
+		closure_buffer(buffer_closure_idx, 11:13) = OMEGA2_lab_pre
+		closure_buffer(buffer_closure_idx, 14:16) = U1_pre
+		closure_buffer(buffer_closure_idx, 17:19) = U2_pre
+		closure_buffer(buffer_closure_idx, 20) = delta_E_tr
+		closure_buffer(buffer_closure_idx, 21) = delta_E_rot
+		closure_buffer(buffer_closure_idx, 22) = delta_E_total
+		closure_buffer(buffer_closure_idx, 23) = Et_f_elastic
+		closure_buffer(buffer_closure_idx, 24) = Er_f_elastic
+		closure_buffer(buffer_closure_idx, 25) = Ef(1)
+		closure_buffer(buffer_closure_idx, 26) = Ef(2)
+		closure_buffer(buffer_closure_idx, 27) = E0
+		closure_buffer(buffer_closure_idx, 28) = elastic_rel_error
+		closure_buffer(buffer_closure_idx, 29) = DBLE(NPHIT)
+		closure_buffer(buffer_closure_idx, 30) = b_impact/(LCYL + DIA)
+		closure_buffer(buffer_closure_idx, 31:33) = contact_normal
+		closure_buffer(buffer_closure_idx, 34:36) = eij_contact
+		closure_buffer(buffer_closure_idx, 37) = contact_lambda
+		closure_buffer(buffer_closure_idx, 38) = contact_mu
+	END IF
 
 	! Flush if buffer full
-	IF (buffer_idx >= MAX_BUFFER) THEN
+	IF ((WRITE_LEGACY .AND. buffer_idx >= MAX_BUFFER) .OR. &
+		(WRITE_CLOSURE .AND. buffer_closure_idx >= MAX_BUFFER)) THEN
 		CALL FLUSH_BUFFERS()
 	END IF
 	return

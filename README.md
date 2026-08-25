@@ -1,214 +1,180 @@
-# HS_CTC — Hard-Sphere Spherocylinder Collision Trajectory Code
+# HS_CTC: standalone spherocylinder closure coefficients
 
-Fortran DEM (Discrete Element Method) code for simulating binary collisions between two spherocylinder particles, used to study the **Classical Trajectory Calculations (CTC)** in granular gas models.
+HS_CTC performs binary classical-trajectory calculations for smooth, dissipative
+spherocylinders. The closure pipeline estimates a Maxwellian routing baseline and
+16 non-Maxwellian correction coefficients directly from collision data. It does
+not fit against homogeneous-cooling, shear-flow, Fourier-flow, or other DEM
+ensemble simulations.
 
----
+## Closure
 
-## Physics Overview
+The tabulated model is
 
-Each simulation event fires two spherocylinders at each other with initial velocities sampled from Maxwell–Boltzmann distributions at prescribed translational and rotational temperatures. A Hertzian contact spring–dashpot force model with a given coefficient of restitution **α** is integrated until the particles separate. Post-collision scattering angles and energy partitioning are recorded.
-
-**Particle geometry** — a spherocylinder of diameter *D* and cylinder length *L*:
-```
-AR = (L + D) / D    (aspect ratio; AR = 1 is a sphere)
-```
-
-**Contact force** (normal only):
-```
-F_N = K_N δ_n  +  C_N v_n          (Hertz spring + viscous damper)
-K_N = (4/3) √(D/4) E*              C_N = 2 β √(m/2 · K_N)
-```
-where *E\** is the reduced Young's modulus and *β* is derived from the coefficient of restitution *α*.
-
-**Integration** — velocity-Verlet with quaternion-based rotation update.
-
----
-
-## Repository Structure
-
-```
-HS_CTC/
-├── model/                  Fortran source
-│   ├── main.f90            Main collision loop (OpenMP parallelised)
-│   ├── read_input.f90      Input parsing (file + command-line)
-│   ├── initialize.f90      Geometry, material props, file handles
-│   ├── init_part.f90       Particle state initialisation, velocity sampling
-│   ├── calc_force_dem.f90  Contact force, OVERLAP_PP, PROJECTED_AREA
-│   ├── integrate_eom.f90   Velocity-Verlet time-stepper
-│   ├── measure_dem.f90     Per-collision output (buffered)
-│   ├── measure_final.f90   End-of-run statistics
-│   └── mod/
-│       ├── constants_mod.f90   π, SMALL_NUM, cross-product
-│       ├── particles_mod.f90   Particle state arrays
-│       ├── run_param_mod.f90   NTRY, NSAMPLES, dt
-│       └── output_mod.f90      Output buffers, FLUSH_BUFFERS
-├── build/
-│   └── spherocylinder.mak  Makefile (gfortran + OpenMP)
-├── run_parameter_sweep.py  Sequential parameter sweep (Python)
-├── submit_array.sh         SLURM job-array script (HPC cluster)
-└── system_input.dat        Runtime input file (geometry + material)
+```text
+f_tr = [3 theta/(3 theta + 2)] C_M(theta, alpha, AR)
+       [1 + sum_a beta_a(theta, alpha, AR) X_a].
 ```
 
----
+The 12 core features are `a2_tr`, `a2_rot`, `a11`, the six independent Gram
+entries of `Pi`, `R`, and `Q`, and the three Gram entries of `q_tr` and `q_rot`.
+The four separately flagged higher-order candidates are `a3_tr`, `a3_rot`,
+`a21`, and `a12`. See `scripts/closure_common.py` for the exact normalization
+and projection scores.
 
-## Building
+For each collision,
 
-Requires **gfortran ≥ 9** with OpenMP support.
+```text
+delta_tr    = Etr_final_elastic - Etr_final_inelastic
+delta_rot   = Erot_final_elastic - Erot_final_inelastic
+delta_total = delta_tr + delta_rot
+f_M         = sum(delta_tr) / sum(delta_total)
+C_M         = f_M / [3 theta/(3 theta + 2)]
+```
+
+Per-event ratios are diagnostic only and are never averaged to obtain `f_M`.
+
+## Build and run
+
+Requirements are gfortran with OpenMP and Python 3 with NumPy.
 
 ```bash
-cd build
-make -f spherocylinder.mak          # builds ../build/SphCyl
-cp SphCyl ..                        # copy to project root
+make -C build clean all
+python3 -m unittest discover -s tests -v
 ```
 
-To rebuild from scratch:
+The extended executable interface is:
+
+```text
+build/SphCyl alpha kTm kTI AR output_dir [seed] [nsamples] [output_mode]
+```
+
+`output_mode` is `closure`, `legacy`, or `both`. The default is `both` for
+backward compatibility. Closure production uses:
 
 ```bash
-make -f spherocylinder.mak clean && make -f spherocylinder.mak
+OMP_NUM_THREADS=20 build/SphCyl 0.8 1.0 1.0 2.0 \
+  results/example/shard_000 12345 20000 closure
+python3 scripts/validate_closure_run.py results/example/shard_000 --mark-success
+python3 scripts/estimate_closure.py \
+  --run-dir results/example/shard_000 --output-dir coefficients/example
 ```
 
-**Compiler flags** (in `build/spherocylinder.mak`):
-```
-FCFLAGS = -g -fopenmp -O3
-```
+`system_input.dat` supplies diameter, mass, and material properties. The command
+line overrides alpha, temperatures, aspect ratio, seed, and sample count.
 
----
+## Closure event schema
 
-## Input File — `system_input.dat`
+Every closure shard contains:
 
-```
-NSAMPLES                   ! number of collision events to record
-DIA  LCYL  MASS            ! geometry (LCYL overridden by AR in CLI mode)
-EYoung  GPoisson           ! material properties
-ALPHA_PP                   ! coefficient of restitution
-ToE  kTm  kTI              ! T(emperature)/E(nergy) mode, values
-```
+- `closure_events.bin`: little-endian float64 records with 38 columns;
+- `metadata.txt`: schema version, exact column order, scales, parameters, seed,
+  and expected record count;
+- `validation.json` and `_SUCCESS` after validation.
 
-Example (used in legacy / test mode):
-```
-80000
-1.D0    0.0D0    1.D0
-8.9D9   0.3D0
-0.80D0
-T  1.0D0  1.0D0
-```
+The record contains both pre-collision particle velocities, both laboratory-frame
+angular velocities, both particle axes, positive translational/rotational/total
+dissipation, elastic and inelastic energies, elastic replay error, contact count,
+impact geometry, and a unique event ID. The binary format is approximately 30.4
+MB per 100,000 events. Event-ID-specific random streams make pre-collision states
+identical across alpha for a fixed `(theta, AR, shard)` even under OpenMP.
 
----
+## Full sweep on Slurm
 
-## Running
+The simulated grid has 12 inelastic alpha values (`0.50` through `0.95`, plus
+`0.975` and `0.99`), 20 temperature ratios, and five aspect ratios: 1,200 nodes
+per shard. Alpha 1 is not simulated because its routing ratio is `0/0`; the
+aggregation script computes its smooth limit from the four near-elastic anchors.
 
-### Command-line mode (recommended for sweeps)
+After cloning on the HPC:
 
 ```bash
-export OMP_NUM_THREADS=20
-./SphCyl  <alpha>  <kTm>  <kTI>  <AR>  <output_dir>
+git clone git@github.com:SHEREY36/HS_CTC.git
+cd HS_CTC
+make -C build clean all
+python3 -m venv .venv --system-site-packages
+source .venv/bin/activate
+python -c "import numpy"
+mkdir -p logs results manifests coefficients closure_output
 ```
 
-| Argument | Meaning |
-|----------|---------|
-| `alpha`  | Coefficient of restitution (0 < α ≤ 1) |
-| `kTm`    | Translational temperature (kT/m units) |
-| `kTI`    | Rotational temperature (kT/I units) |
-| `AR`     | Aspect ratio; `LCYL = (AR−1)·DIA` |
-| `output_dir` | Directory for output files (created if absent) |
-
-`NSAMPLES`, `DIA`, `MASS`, `EYoung`, `GPoisson` are still read from `system_input.dat`.
-
-**Example:**
-```bash
-./SphCyl 0.80 1.0 1.0 2.0 results/alpha0.80_r1.0_AR2.0
-```
-
-### Legacy mode (no CLI args)
+Pilot stage, 20,000 events per node:
 
 ```bash
-cd run_directory          # directory that contains system_input.dat
-/path/to/SphCyl
+python3 scripts/make_sweep_manifest.py \
+  --stage pilot --samples 20000 --shard-id 0 --output manifests/pilot.csv
+bash hpc/submit_manifest.sh manifests/pilot.csv hpc/sweep_array.slurm 50
 ```
 
----
-
-## Parameter Sweep
-
-### Temperature ratio parameterisation
-
-`kTI` is fixed at **1.0** to avoid singularities. The ratio
-```
-r = kTm / kTI = kTm
-```
-is swept in [0.1, 0.2, …, 2.0] (step 0.1, 20 values).
-
-### Default sweep space
-
-| Parameter | Range | Count |
-|-----------|-------|-------|
-| α (alpha) | 0.50 – 1.00, step 0.05 | 11 |
-| r = kTm/kTI | 0.1 – 2.0, step 0.1 | 20 |
-| AR | 1.0, 1.5, 2.0, 3.0, 4.0 | 5 |
-| **Total** | | **1 100** |
-
-### Sequential sweep (local)
+When all pilot jobs pass, estimate each node. The submission record printed by
+the wrapper contains all Slurm job IDs.
 
 ```bash
-python run_parameter_sweep.py --threads 20 --output-dir results
-
-# Override parameter ranges at the command line:
-python run_parameter_sweep.py --alpha 0.7 0.8 0.9 --ar 1.0 2.0
+python3 scripts/check_manifest_success.py manifests/pilot.csv
+bash hpc/submit_manifest.sh manifests/pilot.nodes.csv hpc/estimate_array.slurm 50
+# After the estimation arrays finish:
+python3 scripts/check_manifest_success.py manifests/pilot.nodes.csv --field coefficient_dir
 ```
 
-### SLURM job array (HPC cluster)
+Add the 80,000-event production shard and re-run the estimators:
 
 ```bash
-sbatch submit_array.sh          # launches 1100 independent jobs
-squeue -u $USER                 # monitor progress
+python3 scripts/make_sweep_manifest.py \
+  --stage production --samples 80000 --shard-id 1 --output manifests/production.csv
+bash hpc/submit_manifest.sh manifests/production.csv hpc/sweep_array.slurm 50
+python3 scripts/check_manifest_success.py manifests/production.csv
+bash hpc/submit_manifest.sh manifests/production.nodes.csv hpc/estimate_array.slurm 50
+# After the estimation arrays finish:
+python3 scripts/check_manifest_success.py manifests/production.nodes.csv --field coefficient_dir
 ```
 
-Each job uses 20 OpenMP threads on 1 node (20 CPU cores).
-Adjust `--cpus-per-task` and `--time` in `submit_array.sh` as needed.
-
----
-
-## Output Files
-
-All files are written to the specified `output_dir`.
-
-| File | Columns | Description |
-|------|---------|-------------|
-| `chi.txt` | b, χ, ψ, μ_in | Impact parameter, scattering angle (translational), scattering angle (rotational), first-contact CoM-to-CoM cosine with incoming direction |
-| `Ef.txt` | Et₀, Er1₀, Er2₀, Et_f, Er1_f, Er2_f, b_c | Pre/post-collision energies + contact impact parameter |
-| `EnergyCons.txt` | E_f/E_0 | Energy conservation ratio (should be ≤ 1 for inelastic) |
-| `NPhit.txt` | N | Number of contact points per collision |
-| `PreRotEnergy.txt` | \|v_rel\|₀, \|v_rel\|_f | Initial and final relative speed |
-| `projArea.txt` | A_proj | Projected area at first contact |
-| `csx.txt` | σ | Collision cross-section estimate |
-
----
-
-## Parallelisation
-
-The outer collision loop (each NTRY trial is independent) is parallelised with **OpenMP**:
-
-- Thread count set via `OMP_NUM_THREADS` environment variable.
-- Each thread uses a unique random seed: `seed = 12345 + thread_id·100000 + NTRY`.
-- Output is buffered per-thread (buffer size 1000) and flushed atomically.
-- Expected parallel efficiency ~85 % on 20 cores (~17× speedup).
-
----
-
-## Validation
-
-Quick sanity checks after a run:
+Aggregate the current estimates:
 
 ```bash
-# Energy conservation: all values should be ≤ 1
-awk '{if ($1 > 1.0001) print "FAIL: line " NR, $1}' EnergyCons.txt | head
-
-# Line counts should equal NSAMPLES
-wc -l chi.txt Ef.txt EnergyCons.txt
+sbatch hpc/aggregate.slurm
 ```
 
----
+If `closure_output/continuation_manifest.csv` contains tasks, submit it, rerun
+the affected node estimators with `closure_output/continuation_nodes.csv`, and
+aggregate again. Continuation shards contain
+100,000 events, stop at one million events per node, and are requested when the
+baseline or coefficient confidence-interval criterion fails. Tail contribution
+remains a reported reliability diagnostic but does not automatically add jobs.
 
-## License
+```bash
+bash hpc/submit_manifest.sh closure_output/continuation_manifest.csv hpc/sweep_array.slurm 50
+python3 scripts/check_manifest_success.py closure_output/continuation_manifest.csv
+bash hpc/submit_manifest.sh closure_output/continuation_nodes.csv hpc/estimate_array.slurm 50
+python3 scripts/check_manifest_success.py closure_output/continuation_nodes.csv \
+  --field coefficient_dir
+sbatch hpc/aggregate.slurm
+```
 
-This code was developed as part of a doctoral research project. All rights reserved.
+For the final table, require all simulated nodes:
+
+```bash
+sbatch --export=ALL,REQUIRE_COMPLETE=1 hpc/aggregate.slurm
+```
+
+Final products are:
+
+- `closure_coefficients_long.csv`: raw and alpha-limit coefficients with
+  statistical and extrapolation-systematic errors;
+- `closure_grid.npz`: dense `(alpha, theta, AR, coefficient)` values, confidence
+  bounds, and separate uncertainty arrays;
+- `qa_summary.csv`: precision and shard-stability state;
+- `continuation_manifest.csv`: only nodes that still need events.
+
+Use `squeue -u "$USER"` and `sacct -j JOB_ID` to monitor. Large event shards
+belong in project or scratch storage, not Git.
+
+## Git handoff
+
+Existing local simulation directories are ignored. Stage source explicitly:
+
+```bash
+git status --short
+git add model build scripts hpc tests README.md .gitignore requirements.txt \
+  system_input.dat run_parameter_sweep.py submit_array.sh
+git commit -m "Add standalone 16-term closure estimation pipeline"
+git push origin master
+```

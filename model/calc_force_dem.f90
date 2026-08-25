@@ -5,11 +5,9 @@
 	USE OUTPUT
 	implicit none
 	DOUBLE PRECISION, DIMENSION(3) :: RHO1, RHO2, E21
-	DOUBLE PRECISION, DIMENSION(3) :: C1R1, C2R2
 	DOUBLE PRECISION, DIMENSION(3) :: VR, OMEGAI, OMEGAJ, V_ROT, VREL_CONTACT
 	DOUBLE PRECISION :: VRN
 	DOUBLE PRECISION :: DISTSQ, DN
-	DOUBLE PRECISION :: FC, FK, FTOTAL(3)
 	DOUBLE PRECISION, DIMENSION(3) :: FN, F_TMP, TAU_FORCE
 	! temporary storage of torque
         DOUBLE PRECISION :: TAU_TMP(3,2)
@@ -140,8 +138,14 @@
 	E21 = C21/SQRT(DSQ)
 
 	! Pass back normalised contact-point positions
-	LAMBDA_OUT = LAMBDA / hLCYL
-	MU_OUT     = MU     / hLCYL
+	IF (hLCYL > SMALL_NUM) THEN
+		LAMBDA_OUT = LAMBDA / hLCYL
+		MU_OUT     = MU     / hLCYL
+	ELSE
+		! A sphere (AR=1) has no cylindrical axis coordinate.
+		LAMBDA_OUT = 0.D0
+		MU_OUT     = 0.D0
+	END IF
 
 	return
 	END SUBROUTINE OVERLAP_PP
@@ -168,7 +172,7 @@
 	END SUBROUTINE PROJECTED_AREA
 !-------------------------------------------------------------------
 	SUBROUTINE CALC_ORIENTATION_AT_CONTACT(E21_in, VRN_in)
-	USE PARTICLES, ONLY: U, MASS, POS
+	USE PARTICLES, ONLY: U, UX, UY, VEL, OMEGA, MASS, POS
 	USE OUTPUT
 	USE CONSTANTS, ONLY: SMALL_NUM
 	IMPLICIT NONE
@@ -220,6 +224,10 @@
 
 	! Pre-collision orientation vectors (full 3D)
 	U1_pre = U(1,:);  U2_pre = U(2,:)
+	C1_pre = VEL(1,:); C2_pre = VEL(2,:)
+	OMEGA1_lab_pre = OMEGA(1,1)*U(1,:) + OMEGA(1,2)*UX(1,:) + OMEGA(1,3)*UY(1,:)
+	OMEGA2_lab_pre = OMEGA(2,1)*U(2,:) + OMEGA(2,2)*UX(2,:) + OMEGA(2,3)*UY(2,:)
+	contact_normal = E21_in
 
 	! Normal-direction translational energy at contact
 	E_n_pre = 0.5D0 * MASS * VRN_in**2

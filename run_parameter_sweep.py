@@ -1,102 +1,60 @@
 #!/usr/bin/env python3
-"""
-Parameter sweep orchestration for HS_CTC simulations.
+"""Run a closure sweep manifest sequentially for local testing."""
 
-Sweeps over:
-  - Coefficient of restitution (alpha_pp)
-  - Temperature ratio r = kTm/kTI  (kTI fixed at 1.0, kTm varies)
-  - Aspect ratio (AR = (LCYL + DIA) / DIA)
+from __future__ import annotations
 
-Temperature parameterisation:
-  kTI = 1.0  (fixed, avoids singularity at kTI=0)
-  kTm = r    where r in [0.1, 0.2, ..., 2.0] (step 0.1)
-  => ratio r = kTm/kTI = kTm
-"""
-
-import subprocess
-import itertools
-import os
-from pathlib import Path
-import numpy as np
 import argparse
-
-# -----------------------------------------------------------------------
-# Default parameter ranges
-# -----------------------------------------------------------------------
-ALPHA_PP_VALUES = np.round(np.linspace(0.5, 1.0, 11), 3)   # 0.5, 0.55, ..., 1.0  (11 values)
-KTM_VALUES      = np.round(np.arange(0.1, 2.01, 0.1), 2)   # 0.1, 0.2, ..., 2.0   (20 values)
-KTI             = 1.0                                        # fixed
-AR_VALUES       = [1.0, 1.5, 2.0, 3.0, 4.0]                # aspect ratios to sweep
-
-# Configuration
-EXECUTABLE      = "./SphCyl"
-BASE_OUTPUT_DIR = "results"
+import csv
+import os
+import subprocess
+import sys
+from pathlib import Path
 
 
-def run_simulation(alpha, ktm, ar, output_dir, num_threads=20):
-    """Run one simulation; kTI is always 1.0."""
-    os.makedirs(output_dir, exist_ok=True)
+ROOT = Path(__file__).resolve().parent
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("manifest", type=Path)
+    parser.add_argument("--threads", type=int, default=1)
+    parser.add_argument("--executable", type=Path, default=ROOT / "build" / "SphCyl")
+    parser.add_argument("--limit", type=int)
+    args = parser.parse_args()
+    if not args.executable.is_file():
+        raise SystemExit(f"missing executable: {args.executable}; build with make -C build clean all")
 
     env = os.environ.copy()
-    env['OMP_NUM_THREADS'] = str(num_threads)
-
-    # SphCyl <alpha> <kTm> <kTI> <AR> <output_dir>
-    cmd = [EXECUTABLE,
-           f"{alpha:.4f}",
-           f"{ktm:.4f}",
-           f"{KTI:.4f}",
-           f"{ar:.4f}",
-           output_dir]
-
-    print(f"  alpha={alpha:.3f}  kTm={ktm:.2f}  kTI={KTI:.1f}  AR={ar:.2f}  "
-          f"r={ktm/KTI:.2f}  -> {output_dir}")
-
-    result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env)
-
-    if result.returncode != 0:
-        print(f"  ERROR: {result.stderr.decode().strip()}")
-        return False
-
-    return True
-
-
-def main():
-    parser = argparse.ArgumentParser(description='Run HS_CTC parameter sweep')
-    parser.add_argument('--threads',    type=int,   default=20,              help='OpenMP threads per run')
-    parser.add_argument('--output-dir', type=str,   default=BASE_OUTPUT_DIR, help='Base output directory')
-    parser.add_argument('--alpha',      type=float, nargs='+', default=None,
-                        help='Override alpha values (space separated)')
-    parser.add_argument('--ar',         type=float, nargs='+', default=None,
-                        help='Override AR values (space separated)')
-    args = parser.parse_args()
-
-    alpha_vals = args.alpha if args.alpha else ALPHA_PP_VALUES
-    ar_vals    = args.ar    if args.ar    else AR_VALUES
-
-    Path(args.output_dir).mkdir(exist_ok=True)
-
-    combos = list(itertools.product(alpha_vals, KTM_VALUES, ar_vals))
-    total  = len(combos)
-
-    print(f"Parameter sweep: {len(alpha_vals)} alpha × {len(KTM_VALUES)} kTm × {len(ar_vals)} AR = {total} runs")
-    print(f"kTI fixed at {KTI}  (temperature ratio r = kTm/kTI)\n")
-
+    env["OMP_NUM_THREADS"] = str(args.threads)
     failed = []
-    for i, (alpha, ktm, ar) in enumerate(combos, 1):
-        print(f"[{i:4d}/{total}]", end="  ")
-        out = f"{args.output_dir}/alpha_{alpha:.3f}_r{ktm/KTI:.2f}_AR{ar:.2f}"
-        ok = run_simulation(alpha, ktm, ar, out, args.threads)
-        if not ok:
-            failed.append((alpha, ktm, ar))
-
-    print(f"\nDone.  {total - len(failed)}/{total} succeeded.")
+    with args.manifest.open(newline="") as stream:
+        rows = list(csv.DictReader(stream))
+    if args.limit is not None:
+        rows = rows[: args.limit]
+    for index, row in enumerate(rows, 1):
+        output_dir = ROOT / row["output_dir"]
+        if (output_dir / "_SUCCESS").is_file():
+            print(f"[{index}/{len(rows)}] skip {row['node_key']} shard={row['shard_id']}")
+            continue
+        output_dir.mkdir(parents=True, exist_ok=True)
+        command = [
+            str(args.executable), row["alpha"], row["theta"], "1.0", row["aspect_ratio"],
+            str(output_dir), row["seed"], row["nsamples"], "closure",
+        ]
+        print(f"[{index}/{len(rows)}] {row['node_key']} shard={row['shard_id']}", flush=True)
+        result = subprocess.run(command, cwd=ROOT, env=env)
+        if result.returncode == 0:
+            result = subprocess.run(
+                [sys.executable, str(ROOT / "scripts" / "validate_closure_run.py"), str(output_dir), "--mark-success"],
+                cwd=ROOT,
+            )
+        if result.returncode != 0:
+            failed.append(row["node_key"])
     if failed:
-        print("Failed runs:")
-        for p in failed:
-            print(f"  alpha={p[0]:.3f}  kTm={p[1]:.2f}  AR={p[2]:.2f}")
-    else:
-        print(f"Results in: {args.output_dir}/")
+        print("Failed nodes:", *failed, sep="\n  ", file=sys.stderr)
+        return 1
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

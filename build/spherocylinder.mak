@@ -2,11 +2,11 @@
 .SUFFIXES: .f90 .o
 
 FC = gfortran
-FCFLAGS = -g -fopenmp -O3
+FCFLAGS ?= -g -fopenmp -O3
 EXECUTABLE = SphCyl
 
-MAINDIR = /home/muhammed/Documents/Thesis/HS_CTC/model
-MODDIR = /home/muhammed/Documents/Thesis/HS_CTC/model/mod
+MAINDIR = ../model
+MODDIR = ../model/mod
 
 MODOBJS = \
 constants_mod.o \
@@ -25,6 +25,9 @@ measure_final.o \
 read_input.o
 
 ALLOBJS = $(OBJS) $(MODOBJS)
+
+.PHONY: all
+all: $(EXECUTABLE)
 
 $(EXECUTABLE) : $(MAINDIR)/main.f90 $(ALLOBJS)
 	$(FC) $(FCFLAGS) $(ALLOBJS) -o $@ $<
@@ -76,4 +79,4 @@ measure_final.o : $(MAINDIR)/measure_final.f90 $(MODOBJS)
 .PHONY : clean
 
 clean :
-	rm *.mod *.o
+	rm -f *.mod *.o $(EXECUTABLE)

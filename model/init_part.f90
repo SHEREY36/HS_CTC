@@ -11,12 +11,11 @@
 !$ use omp_lib
 
 	implicit none
-	INTEGER :: I, J
+	INTEGER :: I
 	DOUBLE PRECISION :: RR
 	DOUBLE PRECISION :: PHI, THETA
-	DOUBLE PRECISION :: VS, pV
-	DOUBLE PRECISION :: WS, pW
-	DOUBLE PRECISION :: spdmax
+	DOUBLE PRECISION :: VS
+	DOUBLE PRECISION :: ROT(3,3), G_VEC(3), V_CM(3), BASIS_NORM
 
 	double precision, dimension(3) :: v1com, v2com, vcom
 	double precision, dimension(3) :: RVEL, RPOS
@@ -35,44 +34,41 @@
 		RR = RNG_UNIFORM(); THETA = 2.D0*RR*PI
 		U(I,:) = (/SIN(PHI)*COS(THETA), SIN(PHI)*SIN(THETA), COS(PHI)/)
 		U(I,:) = U(I,:)/SQRT(DOT_PRODUCT(U(I,:),U(I,:)))
-		RR = RNG_UNIFORM(); PHI = ACOS(RR*2.D0 - 1.D0)
-		RR = RNG_UNIFORM(); THETA = 2.D0*RR*PI
-		UX(I,:) = (/SIN(PHI)*COS(THETA), SIN(PHI)*SIN(THETA), COS(PHI)/)
-		UX(I,:) = UX(I,:) - DOT_PRODUCT(UX(I,:),U(I,:))*U(I,:)
-		UX(I,:) = UX(I,:)/SQRT(DOT_PRODUCT(UX(I,:),UX(I,:)))
+		DO
+			RR = RNG_UNIFORM(); PHI = ACOS(RR*2.D0 - 1.D0)
+			RR = RNG_UNIFORM(); THETA = 2.D0*RR*PI
+			UX(I,:) = (/SIN(PHI)*COS(THETA), SIN(PHI)*SIN(THETA), COS(PHI)/)
+			UX(I,:) = UX(I,:) - DOT_PRODUCT(UX(I,:),U(I,:))*U(I,:)
+			BASIS_NORM = SQRT(DOT_PRODUCT(UX(I,:),UX(I,:)))
+			IF (BASIS_NORM > SMALL_NUM) EXIT
+		END DO
+		UX(I,:) = UX(I,:)/BASIS_NORM
 		UY(I,:) = CROSSPRDCT(UX(I,:),U(I,:))
 		UY(I,:) = UY(I,:)/SQRT(DOT_PRODUCT(UY(I,:),UY(I,:)))
 	END DO
 
-! Constant Temperature	
-	! Sample Velocity from distribution of relative velocity of colliding particles
-	VEL(2,:) = (/0.D0, 0.D0, 0.D0/)
-	VEL(1,2) = 0.D0; VEL(1,3) = 0.D0
-	OMEGA(1,1) = 0.D0; OMEGA(2,1) = 0.D0
+! Constant Temperature
+	VEL(:,:) = 0.D0
+	OMEGA(:,:) = 0.D0
 	IF(ToE.EQ.'T') THEN
-		DO WHILE(.TRUE.)
-			RR = RNG_UNIFORM()
-			VS = RR*VMAX; pV = (VS**3.D0)*EXP(-(VS**2.D0)*0.25D0)
-			RR = RNG_UNIFORM()
-			IF(pV.GT.VMAX) THEN
-				write(*,*) '>vmax'
-				stop
-			END IF
-			IF(pV.GT.RR*VMAX) EXIT
+		! The collision-weighted relative-speed law is
+		! p(g) proportional to g^3 exp(-g^2/4). Therefore g^2/4 is
+		! Gamma(shape=2, scale=1), sampled exactly as two exponentials.
+		VS = 2.D0*SQRT(-LOG(MAX(RNG_UNIFORM()*RNG_UNIFORM(), TINY(1.D0))))
+		G_VEC = (/VS*SQRT(kTm), 0.D0, 0.D0/)
+
+		! For two equal Maxwellian particles, Var(V_cm,k)=T/(2m).
+		DO I = 1,3
+			V_CM(I) = SQRT(0.5D0*kTm)*RNG_NORMAL()
 		END DO
-		VEL(1,1) = VS*SQRT(kTm)
-		! Sample Angular Velocities
-			DO I = 1,2
-				J = 1
-				DO WHILE(J.LE.2)
-					RR = RNG_UNIFORM()
-					WS = 2.D0*RR*WMAX-WMAX; pW = exp(-(ws**2.D0)*0.5D0)
-					RR = RNG_UNIFORM()
-					IF(pW.GT.RR*WMAX) THEN
-						OMEGA(I,J+1) = WS*SQRT(kTI)
-						J = J + 1
-				END IF
-			END DO
+		VEL(1,:) = V_CM + 0.5D0*G_VEC
+		VEL(2,:) = V_CM - 0.5D0*G_VEC
+
+		! The two transverse body-frame spin components are independent,
+		! untruncated Maxwellian normal variates.
+		DO I = 1,2
+			OMEGA(I,2) = SQRT(kTI)*RNG_NORMAL()
+			OMEGA(I,3) = SQRT(kTI)*RNG_NORMAL()
 		END DO
 	ELSE IF(ToE.EQ.'E') THEN
 		RR = RNG_UNIFORM()
@@ -84,6 +80,18 @@
 		write(*,*) 'Particle init not defined'
 		stop
 	END IF
+
+	! Rotate the complete canonical collision by a Haar-uniform SO(3)
+	! rotation. This preserves the trajectory while restoring laboratory-frame
+	! isotropy required by the tensor/vector score projections.
+	CALL RANDOM_ROTATION_MATRIX(ROT)
+	DO I = 1,2
+		POS(I,:) = MATMUL(ROT, POS(I,:))
+		VEL(I,:) = MATMUL(ROT, VEL(I,:))
+		U(I,:)   = MATMUL(ROT, U(I,:))
+		UX(I,:)  = MATMUL(ROT, UX(I,:))
+		UY(I,:)  = MATMUL(ROT, UY(I,:))
+	END DO
 	
 	! Initialize forces
 	F(:,:) = 0.D0
@@ -118,15 +126,7 @@
         Et_00 = MASS*(DOT_PRODUCT(V1COM,V1COM) + DOT_PRODUCT(V2COM,V2COM))
 	
 	
-	! Max relative speed at impact
-	! Additional contributions from rotation
-	spdmax = SQRT(DOT_PRODUCT(VEL(1,:)-VEL(2,:),VEL(1,:)-VEL(2,:)))
-	spdmax = spdmax + &
-		(SQRT(DOT_PRODUCT(OMEGA(1,:),OMEGA(1,:))) +&
-		SQRT(DOT_PRODUCT(OMEGA(2,:),OMEGA(2,:))))*(LCYL+DIA)*0.5D0
-	! Factor of 100 arbitrary
 	dt = TCOLL/50.D0
-        !*(SPDMAX**(-0.2D0))
 	! For calls to outputs
 	VREL0 = VEL(2,:) - VEL(1,:)
 	WREL0 = OMEGA(2,:) - OMEGA(1,:)

@@ -8,7 +8,7 @@
 	
 	! Rotation
 	INTEGER :: I
-	DOUBLE PRECISION, DIMENSION(3) :: OMEGA1, OMEGA2, W
+	DOUBLE PRECISION, DIMENSION(3) :: W
 	DOUBLE PRECISION, DIMENSION(3) :: IW, IWxW
 	DOUBLE PRECISION :: THT1, THT2, hTHT1, hTHT2
 	DOUBLE PRECISION :: q1(3), q10, q2(3), q20
@@ -120,6 +120,5 @@
 
 	return
 	end subroutine integrate_eom
-
 
 

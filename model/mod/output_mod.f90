@@ -20,7 +20,10 @@
 	! Contact geometry (saved at first contact, normalised by hLCYL)
 	DOUBLE PRECISION :: contact_lambda, contact_mu
 	DOUBLE PRECISION :: mu_in
-	DOUBLE PRECISION, DIMENSION(3) :: eij_contact   ! contact normal (r12_fc_hat) at first contact
+	DOUBLE PRECISION, DIMENSION(3) :: eij_contact   ! centre-to-centre direction at first contact
+	DOUBLE PRECISION, DIMENSION(3) :: contact_normal
+	DOUBLE PRECISION, DIMENSION(3) :: C1_pre, C2_pre
+	DOUBLE PRECISION, DIMENSION(3) :: OMEGA1_lab_pre, OMEGA2_lab_pre
 
 	! Nematic order scalars at first contact
 	DOUBLE PRECISION :: S2_pair, S2_1n, S2_2n, S2_1v, S2_2v
@@ -43,6 +46,8 @@
 	!$OMP&             Er_1, Er_2, TMEAN, RMEAN, b_impact, b_contact,            &
 	!$OMP&             Et_f_elastic, Er_f_elastic,                                &
 	!$OMP&             contact_lambda, contact_mu, mu_in, eij_contact,             &
+	!$OMP&             contact_normal, C1_pre, C2_pre,                             &
+	!$OMP&             OMEGA1_lab_pre, OMEGA2_lab_pre,                             &
 	!$OMP&             S2_pair, S2_1n, S2_2n, S2_1v, S2_2v,                      &
 	!$OMP&             cos_u1_n, cos_u2_n, cos_u1_v, cos_u2_v, u1u2_dot,         &
 	!$OMP&             U1_pre, U2_pre, U1_post, U2_post, E_n_pre)
@@ -62,7 +67,7 @@
 	!$OMP THREADPRIVATE(chi_buffer, ef_buffer, econs_buffer, nphit_buffer, &
 	!$OMP&             prerot_buffer, buffer_idx)
 
-	! ftr buffer: [f_tr, delta_Et_el, delta_E_diss] per collision
+	! ftr buffer: [f_tr, delta_tr, delta_total] per collision
 	DOUBLE PRECISION, DIMENSION(MAX_BUFFER, 3) :: ftr_buffer
 	INTEGER :: buffer_ftr_idx
 	!$OMP THREADPRIVATE(ftr_buffer, buffer_ftr_idx)
@@ -79,6 +84,13 @@
 	DOUBLE PRECISION, DIMENSION(MAX_BUFFER, 12) :: uvec_buffer
 	INTEGER :: buffer_uvec_idx
 	!$OMP THREADPRIVATE(uvec_buffer, buffer_uvec_idx)
+
+	! Consolidated binary closure record. All fields are IEEE float64 in the
+	! exact column order written to metadata.txt and scripts/closure_common.py.
+	INTEGER, PARAMETER :: N_CLOSURE_COLS = 38
+	DOUBLE PRECISION, DIMENSION(MAX_BUFFER, N_CLOSURE_COLS) :: closure_buffer
+	INTEGER :: buffer_closure_idx
+	!$OMP THREADPRIVATE(closure_buffer, buffer_closure_idx)
 
 	contains
 
@@ -100,6 +112,7 @@
 		CALL FLUSH_FTR_BUFFER()
 		CALL FLUSH_ORIENT_BUFFER()
 		CALL FLUSH_UVEC_BUFFER()
+		CALL FLUSH_CLOSURE_BUFFER()
 	END SUBROUTINE FLUSH_BUFFERS
 
 	SUBROUTINE FLUSH_FTR_BUFFER()
@@ -140,5 +153,18 @@
 			buffer_uvec_idx = 0
 		END IF
 	END SUBROUTINE FLUSH_UVEC_BUFFER
+
+	SUBROUTINE FLUSH_CLOSURE_BUFFER()
+		INTEGER :: i
+		IF (buffer_closure_idx > 0) THEN
+!$OMP CRITICAL(closure_write)
+			DO i = 1, buffer_closure_idx
+				write(1010) closure_buffer(i,:)
+			END DO
+			flush(1010)
+!$OMP END CRITICAL(closure_write)
+			buffer_closure_idx = 0
+		END IF
+	END SUBROUTINE FLUSH_CLOSURE_BUFFER
 
 	end module output
